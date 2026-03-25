@@ -15,4 +15,4 @@ Engineering clubs, open-source orgs, and any team where a senior lead needs to o
 
 
 ### Tech stack
-React · Tailwind · FastAPI · Claude API · Chroma · GitHub API
+React · Tailwind · FastAPI · GEMINI API · Chroma · GitHub API
