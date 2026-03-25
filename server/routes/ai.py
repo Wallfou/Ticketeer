@@ -1,8 +1,7 @@
 import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from services.github import analyze_repo as github_analyze_repo
-from services.ai import analyze_repo as ai_analyze_repo
+from services.ai import analyze_goal as ai_analyze_goal
 
 router = APIRouter()
 
@@ -15,6 +14,20 @@ async def analyze_with_ai(body: AnalyzeRequest):
     repo_data = await github_analyze_repo(body.repo_url)
     analysis = await ai_analyze_repo(repo_data)
     return analysis
+  except json.JSONDecodeError:
+    raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+  except Exception as e:
+    raise HTTPException(status_code=502, detail=str(e))
+
+class AnalyzeGoalRequest(BaseModel):
+  goal: str
+  analysis: dict
+
+@router.post("/ai/decompose")
+async def analyze_goal_with_ai(body: AnalyzeGoalRequest):
+  try:
+    decomposed = await ai_analyze_goal(body.goal, body.analysis)
+    return decomposed
   except json.JSONDecodeError:
     raise HTTPException(status_code=500, detail="AI returned invalid JSON")
   except Exception as e:

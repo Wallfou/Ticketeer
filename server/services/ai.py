@@ -48,6 +48,7 @@ def build_context(repo_data: dict) -> str:
   {''.join(content_sections)}
   """.strip()
 
+# step 1: analyze the repo and produce a detail overview of the codebase
 async def analyze_repo(repo_data: dict) -> dict:
   context = build_context(repo_data)
   prompt = f"""
@@ -73,5 +74,56 @@ async def analyze_repo(repo_data: dict) -> dict:
     if raw.startswith("json"):
       raw = raw[4:]
 
+  return json.loads(raw.strip())
+
+# step 2: analyze the user's goal and break it down into high level work streams
+async def analyze_goal(goal: str, analysis: dict) -> dict:
+  context = f"""
+  Codebase Summary: {analysis['summary']}
+  Frameworks: {', '.join(analysis['frameworks'])}
+  Languages: {', '.join(analysis['languages'])}
+  Modules:
+  {chr(10).join(f"- {m['name']}: {m['description']}" for m in analysis['modules'])}
+  Complexity:
+  {chr(10).join(f"- {c['area']}: {c['level']}" for c in analysis['complexity_map'])}
+  """
+  prompt = f"""
+  You are a senior engineering lead breaking down a feature request into scoped work.
+  User's goal: "{goal}"
+  {context}
+  Break this goal into adequate number of epics (high-level work streams), then break each epic into 
+  individual implementation tasks.
+  Return ONLY valid JSON with this exact shape:
+  {{
+    "goal": "<the original goal>",
+    "epics": [
+      {{
+        "name": "<epic name>",
+        "description": "<what this epic covers>",
+        "tasks": [
+          {{
+            "title": "<short task title>",
+            "description": "<what needs to be done and why>",
+            "file_hints": ["<relevant file paths from the codebase>"]
+          }}
+        ]
+      }}
+    ]
+  }}
+  Rules:
+  - Epics should be distinct, non-overlapping work streams
+  - Tasks should be concrete and implementable in isolation
+  - file_hints should reference real files/folders from the codebase above
+  """
+
+  model = genai.GenerativeModel("gemini-2.5-flash")
+  response = await model.generate_content_async(prompt)
+  raw = response.text.strip()
+
+  if raw.startswith("```"):
+    raw = raw.split("```")[1]
+    if raw.startswith("json"):
+      raw = raw[4:]
+  
   return json.loads(raw.strip())
 
