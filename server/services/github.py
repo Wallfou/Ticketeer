@@ -114,5 +114,3 @@ async def analyze_repo(repo_url: str, token: Optional[str] = None) -> dict:
     "languages": sorted(language_output),
     "files": output,
   }
-
-

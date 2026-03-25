@@ -1,6 +1,6 @@
 from sqlalchemy import String, Text, Integer, ForeignKey, ARRAY, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from base import Base
+from .base import Base
 import enum
 
 class Project(Base):

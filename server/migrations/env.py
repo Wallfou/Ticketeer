@@ -9,8 +9,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from base import Base
-import models  # ensures all models are registered on Base.metadata
+from db.base import Base
+import db.models  # ensures all models are registered on Base.metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
