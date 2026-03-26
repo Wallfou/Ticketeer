@@ -1,7 +1,11 @@
 import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from services.github import analyze_repo as github_analyze_repo
+from services.ai import analyze_repo as ai_analyze_repo
 from services.ai import analyze_goal as ai_analyze_goal
+from services.ai import classify_tasks as ai_classify_tasks
+from services.ai import write_tickets as ai_write_tickets
 
 router = APIRouter()
 
@@ -28,6 +32,37 @@ async def analyze_goal_with_ai(body: AnalyzeGoalRequest):
   try:
     decomposed = await ai_analyze_goal(body.goal, body.analysis)
     return decomposed
+  except json.JSONDecodeError:
+    raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+  except Exception as e:
+    raise HTTPException(status_code=502, detail=str(e))
+
+class ClassifyTasksRequest(BaseModel):
+  decomposition: dict
+  analysis: dict
+  repo_data: dict
+
+@router.post("/ai/classify")
+async def classify_tasks_with_ai(body: ClassifyTasksRequest):
+  try:
+    classified = await ai_classify_tasks(body.decomposition, body.repo_data, body.analysis)
+    return classified
+  except json.JSONDecodeError:
+    raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+  except Exception as e:
+    raise HTTPException(status_code=502, detail=str(e))
+
+
+class WriteTicketsRequest(BaseModel):
+  classified: dict   # output from /ai/classify
+  analysis: dict     # output from /ai/analyze
+  repo_data: dict    # raw repo data from /github/analyze
+
+@router.post("/ai/tickets")
+async def write_tickets(body: WriteTicketsRequest):
+  try:
+    tickets = await ai_write_tickets(body.classified, body.repo_data, body.analysis)
+    return tickets
   except json.JSONDecodeError:
     raise HTTPException(status_code=500, detail="AI returned invalid JSON")
   except Exception as e:
