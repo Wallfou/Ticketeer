@@ -2,10 +2,29 @@ import os
 import json
 import google.generativeai as genai
 import asyncio
+from aiolimiter import AsyncLimiter
 from dotenv import load_dotenv
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+_gemini_limiter = AsyncLimiter(max_rate=10, time_period=60)
+
+async def _gemini_call(prompt: str, retries: int = 3) -> str:
+  model = genai.GenerativeModel(GEMINI_MODEL)
+  for attempt in range(retries):
+    try:
+      async with _gemini_limiter:
+        response = await model.generate_content_async(prompt)
+      return response.text.strip()
+    except Exception as e:
+      is_rate_limit = "429" in str(e) or "quota" in str(e).lower()
+      if is_rate_limit and attempt < retries - 1:
+        await asyncio.sleep(65)
+      else:
+        raise
+  raise RuntimeError("Gemini rate limit exceeded after retries")
 
 PRIORITY_PATTERNS = {
     "README", "readme", "package.json", "requirements.txt",
@@ -65,9 +84,7 @@ async def analyze_repo(repo_data: dict) -> dict:
   
   {context}
   """
-  model = genai.GenerativeModel("gemini-2.5-flash")
-  response = await model.generate_content_async(prompt)
-  raw = response.text.strip()
+  raw = await _gemini_call(prompt)
 
   # strip markdown code block if gemini wraps the json
   if raw.startswith("```"):
@@ -117,9 +134,7 @@ async def analyze_goal(goal: str, analysis: dict) -> dict:
   - file_hints should reference real files/folders from the codebase above
   """
 
-  model = genai.GenerativeModel("gemini-2.5-flash")
-  response = await model.generate_content_async(prompt)
-  raw = response.text.strip()
+  raw = await _gemini_call(prompt)
 
   if raw.startswith("```"):
     raw = raw.split("```")[1]
@@ -189,9 +204,7 @@ async def classify_single_task(task: dict, repo_data: dict, analysis: dict) -> d
   - important: significant value but not blocking
   - nice_to_have: improves UX/DX but can be deferred
   """
-  model = genai.GenerativeModel("gemini-2.5-flash")
-  response = await model.generate_content_async(prompt)
-  raw = response.text.strip()
+  raw = await _gemini_call(prompt)
   if raw.startswith("```"):
       raw = raw.split("```")[1]
       if raw.startswith("json"):
@@ -354,9 +367,7 @@ async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analy
   relevant_files = retrieve_relevant_files(task, repo_data)
   prompt = _build_ticket_prompt(task, epic_name, relevant_files, analysis)
 
-  model = genai.GenerativeModel("gemini-2.5-flash")
-  response = await model.generate_content_async(prompt)
-  raw = response.text.strip()
+  raw = await _gemini_call(prompt)
 
   if raw.startswith("```"):
     raw = raw.split("```")[1]

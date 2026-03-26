@@ -54,9 +54,9 @@ async def classify_tasks_with_ai(body: ClassifyTasksRequest):
 
 
 class WriteTicketsRequest(BaseModel):
-  classified: dict   # output from /ai/classify
-  analysis: dict     # output from /ai/analyze
-  repo_data: dict    # raw repo data from /github/analyze
+  classified: dict
+  analysis: dict
+  repo_data: dict
 
 @router.post("/ai/tickets")
 async def write_tickets(body: WriteTicketsRequest):
