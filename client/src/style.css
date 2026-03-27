@@ -10,7 +10,8 @@
   --border: #e6e6e6;
   --input-bg: #f6f8fa;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'DM Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   font: 16px/150% var(--sans);
   color: var(--text);

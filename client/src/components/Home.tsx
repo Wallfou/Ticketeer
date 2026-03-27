@@ -136,8 +136,8 @@ function HomePage() {
             {STEPS.map((_, i) => (
               <div
                 key={i}
-                className={`h-1 rounded-full transition-all duration-500 ${
-                  i <= stepIndex ? 'bg-[#2da44e] w-8' : 'bg-[#30363d] w-4'
+                className={`h-1.5 w-10 rounded-full transition-colors duration-500 ${
+                  i <= stepIndex ? 'bg-[#2da44e]' : 'bg-[#30363d]'
                 }`}
               />
             ))}

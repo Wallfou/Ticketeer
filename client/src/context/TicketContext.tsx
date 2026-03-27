@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 
 export interface Ticket {
   id: string
@@ -32,14 +33,27 @@ interface TicketContextType {
 
 const TicketContext = createContext<TicketContextType | null>(null)
 
+const STORAGE_KEY = 'ticketeer_cache'
+
+function loadCache(): { columns: TicketColumns; goal: string; repo: string } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return { columns: { beginner: [], intermediate: [], advanced: [] }, goal: '', repo: '' }
+}
+
 export function TicketProvider({ children }: { children: ReactNode }) {
-  const [columns, setColumns] = useState<TicketColumns>({
-    beginner: [],
-    intermediate: [],
-    advanced: [],
-  })
-  const [goal, setGoal] = useState('')
-  const [repo, setRepo] = useState('')
+  const cached = loadCache()
+  const [columns, setColumns] = useState<TicketColumns>(cached.columns)
+  const [goal, setGoal] = useState(cached.goal)
+  const [repo, setRepo] = useState(cached.repo)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ columns, goal, repo }))
+    } catch {}
+  }, [columns, goal, repo])
 
   return (
     <TicketContext.Provider value={{ columns, setColumns, goal, setGoal, repo, setRepo }}>

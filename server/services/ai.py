@@ -9,7 +9,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
-_gemini_limiter = AsyncLimiter(max_rate=10, time_period=60)
+_gemini_limiter = AsyncLimiter(max_rate=9, time_period=60)
 
 async def _gemini_call(prompt: str, retries: int = 3) -> str:
   model = genai.GenerativeModel(GEMINI_MODEL)
