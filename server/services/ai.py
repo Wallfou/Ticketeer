@@ -1,22 +1,24 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
 import asyncio
 from aiolimiter import AsyncLimiter
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 _gemini_limiter = AsyncLimiter(max_rate=9, time_period=60)
 
 async def _gemini_call(prompt: str, retries: int = 3) -> str:
-  model = genai.GenerativeModel(GEMINI_MODEL)
   for attempt in range(retries):
     try:
       async with _gemini_limiter:
-        response = await model.generate_content_async(prompt)
+        response = await _client.aio.models.generate_content(
+          model=GEMINI_MODEL,
+          contents=prompt,
+        )
       return response.text.strip()
     except Exception as e:
       is_rate_limit = "429" in str(e) or "quota" in str(e).lower()
