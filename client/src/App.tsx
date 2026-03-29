@@ -7,7 +7,7 @@ import { TicketProvider } from './context/TicketContext'
 function App() {
   return (
     <TicketProvider>
-      <div className="min-h-screen bg-[#0d1117] flex flex-col">
+      <div className="h-screen bg-[#0d1117] flex flex-col overflow-hidden">
         <Navbar />
         <Routes>
           <Route path="/" element={<HomePage />} />

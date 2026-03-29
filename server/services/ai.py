@@ -379,6 +379,61 @@ async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analy
   return json.loads(raw.strip())
 
 
+# chat: mutate tickets based on a conversation
+async def chat_tickets(messages: list[dict], tickets: list[dict]) -> dict:
+  tickets_json = json.dumps(tickets, indent=2)
+
+  history_lines = []
+  for m in messages[:-1]:
+    role_label = "User" if m["role"] == "user" else "Assistant"
+    history_lines.append(f"{role_label}: {m['content']}")
+  history_block = ("\nConversation so far:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
+
+  current_message = messages[-1]["content"]
+
+  prompt = f"""You are a project planning assistant helping a team manage their ticket board.
+
+Current tickets (JSON):
+{tickets_json}
+{history_block}
+User: {current_message}
+
+Based on the user's request, respond with a conversational reply and a list of ticket mutations.
+
+Valid action types:
+- "update": modify specific fields of an existing ticket (use the ticket's "id")
+- "create": add a brand-new ticket (you must supply all fields)
+- "delete": remove a ticket by its "id"
+
+Ticket field reference:
+  title (string), epic (string), description (string),
+  complexity ("beginner" | "intermediate" | "advanced"), complexity_reason (string),
+  priority ("critical_path" | "important" | "nice_to_have"), priority_reason (string),
+  file_references (string[]), steps (string[]), acceptance_criteria (string[]), resources (string[])
+
+Respond ONLY with valid JSON in exactly this shape — no markdown, no extra keys:
+{{
+  "reply": "<1-3 sentence conversational response acknowledging what you changed or why you didn't>",
+  "actions": [
+    {{ "type": "update", "ticket_id": "<id>", "fields": {{ "<field>": "<value>" }} }},
+    {{ "type": "create", "ticket": {{ "title": "...", "epic": "...", "description": "...", "complexity": "beginner", "complexity_reason": "...", "priority": "important", "priority_reason": "...", "file_references": [], "steps": [], "acceptance_criteria": [], "resources": [] }} }},
+    {{ "type": "delete", "ticket_id": "<id>" }}
+  ]
+}}
+
+If no ticket changes are needed, return "actions": [].
+"""
+
+  raw = await _gemini_call(prompt)
+
+  if raw.startswith("```"):
+    raw = raw.split("```")[1]
+    if raw.startswith("json"):
+      raw = raw[4:]
+
+  return json.loads(raw.strip())
+
+
 # step 4.3: write all tickets across all epics
 async def write_tickets(classified: dict, repo_data: dict, analysis: dict) -> dict:
   result_epics = []

@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react'
+import { useState, useCallback, memo, useRef, useEffect } from 'react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import type { DropResult } from '@hello-pangea/dnd'
 import { useNavigate } from 'react-router-dom'
@@ -177,30 +177,23 @@ const TicketCard = memo(function TicketCard({ ticket, index, onOpen, dimmed }: {
           }`}
         >
           {/* Epic label */}
-          <p className="text-[10px] font-semibold text-[#484f58] uppercase tracking-widest mb-2 truncate">
+          <p className="text-[13px] font-semibold text-[#6e7681] uppercase tracking-widest mb-2 truncate">
             {ticket.epic}
           </p>
 
           {/* Title */}
           <p className="text-lg font-medium text-[#e6edf3] leading-snug mb-2">{ticket.title}</p>
 
-          {/* Description snippet */}
-          {ticket.description && (
-            <p className="text-xs text-[#6e7681] line-clamp-1 leading-relaxed mb-3">
-              {ticket.description}
-            </p>
-          )}
-
           {/* Footer row */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex flex-wrap gap-1">
               {ticket.file_references?.slice(0, 2).map((f) => (
-                <span key={f} className="text-[10px] text-[#484f58] bg-[#0d1117] border border-[#21262d] px-1.5 py-0.5 rounded font-mono max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap inline-block">
+                <span key={f} className="text-[10px] text-[#6e7681] bg-[#0d1117] border border-[#21262d] px-1.5 py-0.5 rounded font-mono max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap inline-block">
                   {f.split('/').pop()}
                 </span>
               ))}
               {(ticket.file_references?.length ?? 0) > 2 && (
-                <span className="text-[10px] text-[#484f58]">+{ticket.file_references.length - 2}</span>
+                <span className="text-[10px] text-[#6e7681]">+{ticket.file_references.length - 2}</span>
               )}
             </div>
             <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-md ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.nice_to_have}`}>
@@ -334,6 +327,58 @@ function NewTicketModal({ onClose, onSave }: { onClose: () => void; onSave: (t: 
   )
 }
 
+type ChatMessage = {
+  id: string
+  role: 'user' | 'ai'
+  text: string
+}
+
+type Action =
+  | { type: 'update'; ticket_id: string; fields: Partial<Ticket> }
+  | { type: 'create'; ticket: Omit<Ticket, 'id'> }
+  | { type: 'delete'; ticket_id: string }
+
+function applyActions(columns: TicketColumns, actions: Action[]): TicketColumns {
+  let next: TicketColumns = {
+    beginner: [...columns.beginner],
+    intermediate: [...columns.intermediate],
+    advanced: [...columns.advanced],
+  }
+
+  for (const action of actions) {
+    if (action.type === 'update') {
+      const keys = Object.keys(next) as (keyof TicketColumns)[]
+      for (const col of keys) {
+        next[col] = next[col].map((t) =>
+          t.id === action.ticket_id ? { ...t, ...action.fields } : t
+        )
+        const moved = next[col].find((t) => t.id === action.ticket_id)
+        if (moved && moved.complexity !== col) {
+          next[col] = next[col].filter((t) => t.id !== action.ticket_id)
+          next[moved.complexity] = [...next[moved.complexity], moved]
+        }
+      }
+    } else if (action.type === 'create') {
+      const newTicket: Ticket = { ...action.ticket, id: crypto.randomUUID() }
+      const col = newTicket.complexity as keyof TicketColumns
+      next[col] = [...next[col], newTicket]
+    } else if (action.type === 'delete') {
+      const keys = Object.keys(next) as (keyof TicketColumns)[]
+      for (const col of keys) {
+        next[col] = next[col].filter((t) => t.id !== action.ticket_id)
+      }
+    }
+  }
+
+  return next
+}
+
+const INITIAL_AI_MESSAGE: ChatMessage = {
+  id: 'welcome',
+  role: 'ai',
+  text: 'Hi! I can help you customize your tickets. Try asking me something like "make the auth ticket more detailed" or "split the payment ticket into smaller ones".',
+}
+
 function Dashboard() {
   const { columns, setColumns } = useTickets()
   const navigate = useNavigate()
@@ -341,6 +386,70 @@ function Dashboard() {
   const [showNewTicket, setShowNewTicket] = useState(false)
   const [search, setSearch] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('all')
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([INITIAL_AI_MESSAGE])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const chatTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
+
+  const sendMessage = useCallback(async () => {
+    const text = chatInput.trim()
+    if (!text || chatLoading) return
+
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text }
+    setChatMessages((prev) => [...prev, userMsg])
+    setChatInput('')
+    if (chatTextareaRef.current) chatTextareaRef.current.style.height = 'auto'
+    setChatLoading(true)
+
+    try {
+      const allTickets: Ticket[] = [
+        ...columns.beginner,
+        ...columns.intermediate,
+        ...columns.advanced,
+      ]
+
+      const history = [...chatMessages, userMsg].map((m) => ({
+        role: m.role,
+        content: m.text,
+      }))
+
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history, tickets: allTickets }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(err.detail ?? 'Server error')
+      }
+
+      const data: { reply: string; actions: Action[] } = await res.json()
+
+      setColumns(applyActions(columns, data.actions))
+
+      const aiMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'ai',
+        text: data.reply,
+      }
+      setChatMessages((prev) => [...prev, aiMsg])
+    } catch (err) {
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'ai',
+        text: `Sorry, something went wrong: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      }
+      setChatMessages((prev) => [...prev, errorMsg])
+    } finally {
+      setChatLoading(false)
+    }
+  }, [chatInput, chatLoading, chatMessages, columns, setColumns])
 
   const totalTickets = Object.values(columns).reduce((sum, col) => sum + col.length, 0)
 
@@ -394,27 +503,31 @@ function Dashboard() {
   }
 
   return (
-    <main className="flex-1 flex flex-col px-8 pt-6 pb-4 min-h-0">
+    <main className="flex-1 flex min-h-0 gap-5 px-8 pt-6 pb-4">
+
+      {/* left column: toolbar + board */}
+      <div className="flex flex-col flex-1 min-h-0 min-w-0">
+
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-6 border-b border-[#21262d] pb-5">
         <h2 className="text-xl font-semibold tracking-tight text-[#e6edf3] shrink-0 mr-1">Ticket Board</h2>
-        <span className="text-xs text-[#484f58] tabular-nums shrink-0">{totalTickets}</span>
+        <span className="text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-full tabular-nums shrink-0">{totalTickets}</span>
 
-        <div className="w-px h-4 bg-[#21262d] shrink-0 mx-1" />
+        <div className="w-px h-4 bg-[#30363d] shrink-0 mx-1" />
 
       
-        <div className="flex items-center gap-2 bg-[#0d1117] mx-4 border-2 border-[#21262d] rounded-lg px-3 py-1.5 flex-1 max-w-xs focus-within:border-[#207a39] transition">
-          <svg className="w-3.5 h-3.5 text-[#484f58] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center gap-2 bg-[#161b22] mx-4 border-2 border-[#30363d] rounded-lg px-3 py-1.5 flex-1 max-w-xs focus-within:border-[#2da44e] transition">
+          <svg className="w-3.5 h-3.5 text-[#8b949e] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
           </svg>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search tickets…"
-            className="bg-transparent text-xs text-[#e6edf3] placeholder-[#484f58] focus:outline-none w-full"
+            className="bg-transparent text-xs text-[#e6edf3] placeholder-[#6e7681] focus:outline-none w-full"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="text-[#484f58] hover:text-[#6e7681] transition shrink-0">
+            <button onClick={() => setSearch('')} className="text-[#6e7681] hover:text-[#c9d1d9] transition shrink-0">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -423,15 +536,15 @@ function Dashboard() {
         </div>
 
         {/* Priority filter pills */}
-        <div className="flex items-center gap-1 shrink-0 border-2 border-[#21262d] rounded-lg">
+        <div className="flex items-center gap-0.5 shrink-0 bg-[#161b22] border border-[#30363d] rounded-lg p-0.5">
           {PRIORITY_FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => setPriorityFilter(opt.value)}
-              className={`text-xs px-2.5 py-1.5 rounded-md transition font-medium ${
+              className={`text-xs px-3 py-1.5 rounded-md transition font-medium ${
                 priorityFilter === opt.value
-                  ? 'bg-[#21262d] text-[#e6edf3]'
-                  : 'text-[#484f58] hover:text-[#ffffff]'
+                  ? 'bg-[#207a39] text-white shadow-sm'
+                  : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]'
               }`}
             >
               {opt.label}
@@ -444,7 +557,7 @@ function Dashboard() {
         {/* Actions */}
         <button
           onClick={() => setShowNewTicket(true)}
-          className="flex items-center gap-1.5 text-xs font-medium text-white bg-[#207a39] hover:bg-[#2da44e] px-3 py-1.5 rounded-lg transition shrink-0"
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-[#207a39] hover:bg-[#3fb950] px-3 py-1.5 rounded-lg transition shrink-0 shadow-sm"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -453,7 +566,7 @@ function Dashboard() {
         </button>
         <button
           onClick={() => navigate('/')}
-          className="text-xs text-[#6e7681] hover:text-[#8b949e] px-3 py-1.5 rounded-lg transition shrink-0"
+          className="text-xs font-medium text-[#c9d1d9] border border-[#30363d] hover:border-[#8b949e] hover:text-white bg-[#161b22] hover:bg-[#21262d] px-3 py-1.5 rounded-lg transition shrink-0"
         >
           New Analysis
         </button>
@@ -462,40 +575,110 @@ function Dashboard() {
       {/* Board */}
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-5 flex-1 min-h-0">
-          {COLUMNS.map((col) => (
-            <div key={col.key} className="flex flex-col flex-1 min-w-0">
-              {/* Column header */}
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <span className={`w-3 h-3 rounded-full shrink-0 ${col.dot}`} />
-                <span className="text-lg font-medium text-[#8b949e]">{col.label}</span>
-                <span className="ml-auto text-xs text-[#484f58] tabular-nums">{columns[col.key].length}</span>
-              </div>
+            {COLUMNS.map((col) => (
+              <div key={col.key} className="flex flex-col flex-1 min-w-0">
+                {/* Column header */}
+                <div className="flex items-center gap-2 mb-3 px-1">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dot}`} />
+                  <span className="text-sm font-semibold tracking-widest text-[#c9d1d9]">{col.label}</span>
+                  <span className="ml-auto text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-full tabular-nums">{columns[col.key].length}</span>
+                </div>
 
-              {/* Droppable column */}
-              <Droppable droppableId={col.key}>
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={`flex-1 rounded-xl p-2 transition-colors duration-150 overflow-y-auto ${
-                      snapshot.isDraggingOver ? 'bg-[#161b22]' : 'bg-[#0d1117]'
-                    }`}
-                    style={{ minHeight: '200px' }}
-                  >
-                    {columns[col.key].map((ticket, index) => (
-                      <TicketCard key={ticket.id} ticket={ticket} index={index} onOpen={handleOpenTicket} dimmed={!matches(ticket)} />
-                    ))}
-                    {provided.placeholder}
-                    {columns[col.key].length === 0 && !snapshot.isDraggingOver && (
-                      <p className="text-xs text-[#30363d] text-center pt-10">No tickets</p>
-                    )}
-                  </div>
-                )}
-              </Droppable>
-            </div>
-          ))}
+                {/* Droppable column */}
+                <Droppable droppableId={col.key}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`flex-1 rounded-xl p-2 transition-colors duration-150 overflow-y-auto ${
+                        snapshot.isDraggingOver ? 'bg-[#161b22]' : 'bg-[#0d1117]'
+                      }`}
+                      style={{ minHeight: '200px' }}
+                    >
+                      {columns[col.key].map((ticket, index) => (
+                        <TicketCard key={ticket.id} ticket={ticket} index={index} onOpen={handleOpenTicket} dimmed={!matches(ticket)} />
+                      ))}
+                      {provided.placeholder}
+                      {columns[col.key].length === 0 && !snapshot.isDraggingOver && (
+                        <p className="text-xs text-[#30363d] text-center pt-10">No tickets</p>
+                      )}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
+            ))}
         </div>
       </DragDropContext>
+
+      </div>
+
+      {/* Chat Panel */}
+        <div className="w-[350px] shrink-0 flex flex-col min-h-0 bg-[#161b22] border border-[#30363d] overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#21262d] shrink-0">
+            <span className="text-md font-semibold text-[#e6edf3]">Ticket Copilot</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {chatMessages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-[#207a39] text-white rounded-br-sm'
+                      : 'bg-[#1c2128] text-white border border-[#30363d] rounded-bl-sm'
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="bg-[#1c2128] border border-[#30363d] rounded-2xl rounded-bl-sm px-3 py-2 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#484f58] animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#484f58] animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#484f58] animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="shrink-0 p-3">
+            <div className="flex items-end gap-2 bg-[#0d1117] border-2 border-[#30363d] rounded-xl px-3 py-2 focus-within:border-[#2da44e] transition">
+              <textarea
+                ref={chatTextareaRef}
+                value={chatInput}
+                onChange={(e) => {
+                  setChatInput(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = `${e.target.scrollHeight}px`
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    sendMessage()
+                    const el = e.currentTarget
+                    requestAnimationFrame(() => { el.style.height = 'auto' })
+                  }
+                }}
+                placeholder="Ask about your tickets…"
+                rows={1}
+                className="flex-1 bg-transparent text-sm text-[#e6edf3] placeholder-[#484f58] focus:outline-none resize-none leading-relaxed overflow-hidden"
+                style={{ maxHeight: '120px', overflowY: 'auto' }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!chatInput.trim() || chatLoading}
+                className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-[#207a39] hover:bg-[#2da44e] disabled:bg-[#1a2d1e] disabled:cursor-not-allowed transition"
+              >
+                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
 
       {selectedTicket && (
         <TicketModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />

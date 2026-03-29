@@ -1,11 +1,13 @@
 import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Any
 from services.github import analyze_repo as github_analyze_repo
 from services.ai import analyze_repo as ai_analyze_repo
 from services.ai import analyze_goal as ai_analyze_goal
 from services.ai import classify_tasks as ai_classify_tasks
 from services.ai import write_tickets as ai_write_tickets
+from services.ai import chat_tickets as ai_chat_tickets
 
 router = APIRouter()
 
@@ -63,6 +65,28 @@ async def write_tickets(body: WriteTicketsRequest):
   try:
     tickets = await ai_write_tickets(body.classified, body.repo_data, body.analysis)
     return tickets
+  except json.JSONDecodeError:
+    raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+  except Exception as e:
+    raise HTTPException(status_code=502, detail=str(e))
+
+
+class ChatMessageItem(BaseModel):
+  role: str  # "user" | "ai"
+  content: str
+
+class ChatRequest(BaseModel):
+  messages: list[ChatMessageItem]
+  tickets: list[dict[str, Any]]
+
+@router.post("/ai/chat")
+async def chat(body: ChatRequest):
+  try:
+    result = await ai_chat_tickets(
+      [m.model_dump() for m in body.messages],
+      body.tickets,
+    )
+    return result
   except json.JSONDecodeError:
     raise HTTPException(status_code=500, detail="AI returned invalid JSON")
   except Exception as e:
