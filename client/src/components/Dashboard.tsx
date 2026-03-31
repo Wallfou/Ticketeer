@@ -386,12 +386,26 @@ function Dashboard() {
   const [showNewTicket, setShowNewTicket] = useState(false)
   const [search, setSearch] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('all')
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([INITIAL_AI_MESSAGE])
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('chatMessages')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        return [INITIAL_AI_MESSAGE]
+      }
+    }
+    return [INITIAL_AI_MESSAGE]
+  })
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const chatTextareaRef = useRef<HTMLTextAreaElement>(null)
 
+  useEffect(() => {
+    localStorage.setItem('chatMessages', JSON.stringify(chatMessages))
+  }, [chatMessages])
+  
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
@@ -413,7 +427,15 @@ function Dashboard() {
         ...columns.advanced,
       ]
 
-      const history = [...chatMessages, userMsg].map((m) => ({
+      // keeping only the most recent messages to avoid exceeding the model's context window
+      const CHAT_HISTORY_LIMIT = 20
+      const recentMessages = [...chatMessages, userMsg]
+      const truncated =
+        recentMessages.length > CHAT_HISTORY_LIMIT
+          ? [recentMessages[0], ...recentMessages.slice(-(CHAT_HISTORY_LIMIT - 1))]
+          : recentMessages
+
+      const history = truncated.map((m) => ({
         role: m.role,
         content: m.text,
       }))
@@ -509,7 +531,7 @@ function Dashboard() {
       <div className="flex flex-col flex-1 min-h-0 min-w-0">
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-6 border-b border-[#21262d] pb-5">
+      <div className="flex items-center gap-3 mb-6 pb-3">
         <h2 className="text-xl font-semibold tracking-tight text-[#e6edf3] shrink-0 mr-1">Ticket Board</h2>
         <span className="text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-full tabular-nums shrink-0">{totalTickets}</span>
 
@@ -590,7 +612,7 @@ function Dashboard() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex-1 rounded-xl p-2 transition-colors duration-150 overflow-y-auto ${
+                      className={`flex-1 rounded-xl p-3 transition-colors duration-150 overflow-y-auto ${
                         snapshot.isDraggingOver ? 'bg-[#161b22]' : 'bg-[#0d1117]'
                       }`}
                       style={{ minHeight: '200px' }}
@@ -613,8 +635,8 @@ function Dashboard() {
       </div>
 
       {/* Chat Panel */}
-        <div className="w-[350px] shrink-0 flex flex-col min-h-0 bg-[#161b22] border border-[#30363d] overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#21262d] shrink-0">
+        <div className="w-[350px] shrink-0 flex flex-col min-h-0 bg-[#010409] border border-[#30363d] overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[#21262d] shrink-0">
             <span className="text-md font-semibold text-[#e6edf3]">Ticket Copilot</span>
           </div>
 
@@ -644,8 +666,8 @@ function Dashboard() {
             <div ref={chatEndRef} />
           </div>
 
-          <div className="shrink-0 p-3">
-            <div className="flex items-end gap-2 bg-[#0d1117] border-2 border-[#30363d] rounded-xl px-3 py-2 focus-within:border-[#2da44e] transition">
+          <div className="shrink-0 p-4">
+            <div className="flex items-end gap-2 bg-[#010409] border-2 border-[#30363d] rounded-xl px-3 py-1 focus-within:border-[#2da44e] transition">
               <textarea
                 ref={chatTextareaRef}
                 value={chatInput}

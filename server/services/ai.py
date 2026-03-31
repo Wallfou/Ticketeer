@@ -379,7 +379,7 @@ async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analy
   return json.loads(raw.strip())
 
 
-# chat: mutate tickets based on a conversation
+# chat: mutate tickets based on a additional user inputs
 async def chat_tickets(messages: list[dict], tickets: list[dict]) -> dict:
   tickets_json = json.dumps(tickets, indent=2)
 
