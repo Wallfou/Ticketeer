@@ -139,7 +139,7 @@ function HomePage() {
         <div className="flex flex-col gap-4">
           <div>
             <label className="text-[13px] font-semibold text-[#8b949e] uppercase tracking-widest block mb-2">Repository</label>
-            <div className="flex items-center bg-[#0d1117] border-2 border-[#21262d] rounded-lg px-3 focus-within:border-[#2da44e] transition">
+            <div className="flex items-center bg-[#0d1117] border-2 border-[#21262d] rounded-md px-3 focus-within:border-[#2da44e] transition">
               <svg className="w-3.5 h-3.5 text-[#484f58] mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
@@ -163,7 +163,7 @@ function HomePage() {
               placeholder="e.g. Add OAuth2 login with Google and GitHub"
               disabled={loading}
               rows={3}
-              className="w-full bg-[#0d1117] border-2 border-[#21262d] rounded-lg px-3 py-2.5 text-sm text-[#e6edf3] placeholder-[#484f58] focus:outline-none focus:border-[#2da44e] resize-none transition disabled:opacity-50"
+              className="w-full bg-[#0d1117] border-2 border-[#21262d] rounded-md px-3 py-2.5 text-sm text-[#e6edf3] placeholder-[#484f58] focus:outline-none focus:border-[#2da44e] resize-none transition disabled:opacity-50"
             />
           </div>
 
@@ -171,7 +171,7 @@ function HomePage() {
           <button
             onClick={handleGenerate}
             disabled={loading || !url.trim() || !goal.trim()}
-            className="w-full py-2.5 bg-[#2da44e] hover:bg-[#3fb950] disabled:bg-[#1a3a2a] disabled:text-[#484f58] text-white text-sm font-semibold rounded-lg transition disabled:cursor-not-allowed"
+            className="w-full py-2.5 bg-[#2da44e] hover:bg-[#3fb950] disabled:bg-[#1a3a2a] disabled:text-[#484f58] text-white text-sm font-semibold rounded-md transition disabled:cursor-not-allowed"
           >
             {loading ? LOADING_STEPS[stepIndex] ?? 'Processing...' : 'Generate tickets'}
           </button>
@@ -182,7 +182,7 @@ function HomePage() {
               {LOADING_STEPS.map((_, i) => (
                 <div
                   key={i}
-                  className={`h-1 flex-1 rounded-full transition-colors duration-500 ${
+                  className={`h-1 flex-1 rounded-md transition-colors duration-500 ${
                     i <= stepIndex ? 'bg-[#2da44e]' : 'bg-[#21262d]'
                   }`}
                 />
@@ -210,13 +210,13 @@ function HomePage() {
                 {/* Dot */}
                 <div className="shrink-0 mt-0.5 z-10">
                   {step.isTerminal ? (
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isDone || stepIndex === -1 ? step.dotColor : 'bg-[#21262d]'} transition-colors duration-300`}>
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center ${isDone || stepIndex === -1 ? step.dotColor : 'bg-[#21262d]'} transition-colors duration-300`}>
                       <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
                   ) : (
-                    <div className={`w-5 h-5 rounded-full border-2 transition-all duration-300 ${
+                    <div className={`w-5 h-5 rounded-md border-2 transition-all duration-300 ${
                       isActive
                         ? `${step.dotColor} border-transparent ring-4 ${step.ringColor} animate-pulse`
                         : isDone
@@ -243,7 +243,7 @@ function HomePage() {
                     {step.description}
                   </p>
                   {step.code && (
-                    <div className={`bg-[#161b22] border rounded-lg px-3 py-2 font-mono text-xs transition-colors duration-300 ${
+                    <div className={`bg-[#161b22] border rounded-md px-3 py-2 font-mono text-xs transition-colors duration-300 ${
                       isActive ? 'border-[#30363d] text-[#c9d1d9]' : 'border-[#21262d] text-[#6e7681]'
                     }`}>
                       {step.code}

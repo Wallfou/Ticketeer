@@ -434,6 +434,46 @@ If no ticket changes are needed, return "actions": [].
   return json.loads(raw.strip())
 
 
+async def assign_tickets(tickets: list[dict], roster: list[dict]) -> dict:
+  tickets_json = json.dumps(tickets, indent=2)
+  roster_json = json.dumps(roster, indent=2)
+  prompt = f"""You are a technical lead assigning work to team members.
+
+Here are the tickets (JSON):
+{tickets_json}
+
+Here is the team roster (JSON). Each member has "name", "experience" (beginner | intermediate | advanced), and "tags" (skills/tech areas they are comfortable with):
+{roster_json}
+
+Assign each ticket to exactly one roster member. Rules:
+- Beginner members should primarily get beginner-complexity tickets; advanced members should primarily get advanced-complexity tickets.
+- Intermediate members can take beginner, intermediate, or advanced tickets when it improves skill match or workload balance.
+- Prefer members whose tags overlap with the ticket's tech area (infer from title, description, epic, file_references).
+- Balance workload so counts per member are roughly even (no one overloaded when alternatives exist).
+- Tickets with priority "critical_path" should go to the member who is the strongest match on skills and reliability for that work (prefer advanced skill alignment for critical items when choosing between similar options).
+
+Each ticket has an "id" string — your "ticket_id" MUST match that id exactly.
+
+Return ONLY valid JSON with this exact shape (no markdown):
+{{
+  "assignments": [
+    {{ "ticket_id": "<same id as in tickets>", "member": "<exact member name from roster>", "reason": "<1-3 sentences: complexity fit, skill overlap, workload balance, and critical path handling if relevant>" }}
+  ]
+}}
+
+Include one assignment per ticket in the input. The "member" value must exactly match a roster member's "name" (case and spacing).
+"""
+
+  raw = await _gemini_call(prompt)
+
+  if raw.startswith("```"):
+    raw = raw.split("```")[1]
+    if raw.startswith("json"):
+      raw = raw[4:]
+
+  return json.loads(raw.strip())
+
+
 # step 4.3: write all tickets across all epics
 async def write_tickets(classified: dict, repo_data: dict, analysis: dict) -> dict:
   result_epics = []

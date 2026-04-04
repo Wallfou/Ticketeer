@@ -1,5 +1,14 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import type { ReactNode } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
+
+export type ExperienceTier = 'beginner' | 'intermediate' | 'advanced'
+
+export interface TeamMember {
+  id: string
+  name: string
+  experience: ExperienceTier
+  tags: string[]
+}
 
 export interface Ticket {
   id: string
@@ -14,6 +23,9 @@ export interface Ticket {
   steps: string[]
   acceptance_criteria: string[]
   resources: string[]
+  assignee_member_id?: string | null
+  assignee_name?: string | null
+  assignment_reason?: string | null
 }
 
 export interface TicketColumns {
@@ -24,23 +36,38 @@ export interface TicketColumns {
 
 interface TicketContextType {
   columns: TicketColumns
-  setColumns: (columns: TicketColumns) => void
+  setColumns: Dispatch<SetStateAction<TicketColumns>>
   goal: string
   setGoal: (goal: string) => void
   repo: string
   setRepo: (repo: string) => void
+  team: TeamMember[]
+  setTeam: (team: TeamMember[]) => void
 }
 
 const TicketContext = createContext<TicketContextType | null>(null)
 
 const STORAGE_KEY = 'ticketeer_cache'
 
-function loadCache(): { columns: TicketColumns; goal: string; repo: string } {
+function loadCache(): {
+  columns: TicketColumns
+  goal: string
+  repo: string
+  team: TeamMember[]
+} {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      return {
+        columns: (parsed.columns as TicketColumns) ?? { beginner: [], intermediate: [], advanced: [] },
+        goal: (parsed.goal as string) ?? '',
+        repo: (parsed.repo as string) ?? '',
+        team: Array.isArray(parsed.team) ? (parsed.team as TeamMember[]) : [],
+      }
+    }
   } catch {}
-  return { columns: { beginner: [], intermediate: [], advanced: [] }, goal: '', repo: '' }
+  return { columns: { beginner: [], intermediate: [], advanced: [] }, goal: '', repo: '', team: [] }
 }
 
 export function TicketProvider({ children }: { children: ReactNode }) {
@@ -48,15 +75,16 @@ export function TicketProvider({ children }: { children: ReactNode }) {
   const [columns, setColumns] = useState<TicketColumns>(cached.columns)
   const [goal, setGoal] = useState(cached.goal)
   const [repo, setRepo] = useState(cached.repo)
+  const [team, setTeam] = useState<TeamMember[]>(cached.team)
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ columns, goal, repo }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ columns, goal, repo, team }))
     } catch {}
-  }, [columns, goal, repo])
+  }, [columns, goal, repo, team])
 
   return (
-    <TicketContext.Provider value={{ columns, setColumns, goal, setGoal, repo, setRepo }}>
+    <TicketContext.Provider value={{ columns, setColumns, goal, setGoal, repo, setRepo, team, setTeam }}>
       {children}
     </TicketContext.Provider>
   )
