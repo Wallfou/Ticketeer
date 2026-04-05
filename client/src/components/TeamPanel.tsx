@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useCallback, useState } from 'react'
 import type { ExperienceTier, TeamMember } from '../context/TicketContext'
 
 const TIER_OPTIONS: { value: ExperienceTier; label: string }[] = [
@@ -32,37 +31,14 @@ function avatarHue(name: string): number {
   return Math.abs(h) % 360
 }
 
-function skillHue(tag: string): number {
-  const key = tag.trim().toLowerCase()
-  let h = 0
-  for (let i = 0; i < key.length; i++) h = (h << 5) - h + key.charCodeAt(i)
-  return Math.abs(h) % 360
+function tierLabel(tier: ExperienceTier): string {
+  return TIER_OPTIONS.find((o) => o.value === tier)?.label ?? tier
 }
 
-function skillChipStyle(tag: string): CSSProperties {
-  const hue = skillHue(tag)
-  return {
-    backgroundColor: `hsla(${hue}, 38%, 16%, 0.95)`,
-    color: `hsl(${hue}, 68%, 72%)`,
-    border: `0px solid hsl(${hue}, 32%, 30%)`,
-  }
-}
-
-function aggregateSkillCoverage(team: TeamMember[]): { label: string; count: number; colorKey: string }[] {
-  const map = new Map<string, { label: string; count: number }>()
-  for (const m of team) {
-    for (const raw of m.tags) {
-      const t = raw.trim()
-      if (!t) continue
-      const key = t.toLowerCase()
-      const cur = map.get(key)
-      if (cur) cur.count += 1
-      else map.set(key, { label: t, count: 1 })
-    }
-  }
-  return Array.from(map.entries())
-    .map(([colorKey, { label, count }]) => ({ label, count, colorKey }))
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+const TIER_TEXT: Record<ExperienceTier, string> = {
+  beginner: 'text-[#3fb950]',
+  intermediate: 'text-[#e3b341]',
+  advanced: 'text-[#f85149]',
 }
 
 export default function TeamPanel({
@@ -116,8 +92,6 @@ export default function TeamPanel({
   )
 
   const isNewDraft = editingId && draft && !team.some((m) => m.id === editingId)
-
-  const skillCoverage = useMemo(() => aggregateSkillCoverage(team), [team])
 
   return (
     <div className="w-[340px] shrink-0 flex flex-col min-h-0 bg-[#010409] border-r border-[#30363d] overflow-hidden">
@@ -186,7 +160,7 @@ export default function TeamPanel({
           return (
             <div
               key={m.id}
-              className="group rounded-md border border-[#21262d] bg-[#0d1117] p-3 hover:border-[#30363d] transition"
+              className="group rounded-md bg-[#0d1117] p-3 hover:border-[#30363d] transition"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
@@ -198,15 +172,16 @@ export default function TeamPanel({
                     {initialsForName(m.name)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[#e6edf3] truncate">{m.name}</p>
-                    <p className="text-[10px] text-[#8b949e] mt-0.5 capitalize">{m.experience}</p>
+                    <p className="text-sm font-bold text-[#e6edf3] truncate">{m.name}</p>
+                    <p className={`text-[10px] font-medium mt-0.5 ${TIER_TEXT[m.experience]}`}>
+                      {tierLabel(m.experience)}
+                    </p>
                     {m.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {m.tags.map((t) => (
                           <span
                             key={t}
-                            style={skillChipStyle(t)}
-                            className="text-[9px] leading-tight border px-2 py-1 rounded-sm"
+                            className="text-[9px] leading-tight text-[#8b949e] bg-[#161b22] border border-[#30363d] px-2 py-1 rounded-sm"
                           >
                             {t}
                           </span>
@@ -215,7 +190,7 @@ export default function TeamPanel({
                     )}
                   </div>
                 </div>
-                <div className="flex flex-col gap-1 shrink-0 opacity-80 group-hover:opacity-100">
+                <div className="flex flex-col shrink-0 opacity-80 group-hover:opacity-100">
                   <button
                     type="button"
                     onClick={() => startEdit(m)}

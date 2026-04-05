@@ -37,17 +37,8 @@ const PRIORITY_LABELS: Record<string, string> = {
   nice_to_have: 'Nice to Have',
 }
 
-const COMPLEXITY_DOT: Record<string, string> = {
-  beginner:     'bg-[#2da44e]',
-  intermediate: 'bg-[#d29922]',
-  advanced:     'bg-[#f85149]',
-}
-
-const COMPLEXITY_LABELS: Record<string, string> = {
-  beginner:     'Beginner',
-  intermediate: 'Intermediate',
-  advanced:     'Advanced',
-}
+const REASON_DETAILS_SUMMARY_CLASS =
+  'flex cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-xs font-semibold text-[#8b949e] uppercase tracking-wider list-none select-none [&::-webkit-details-marker]:hidden'
 
 function TicketModal({
   ticket,
@@ -58,6 +49,13 @@ function TicketModal({
   team: TeamMember[]
   onClose: () => void
 }) {
+  const [acDone, setAcDone] = useState<Record<number, boolean>>({})
+  const [assignReasonOpen, setAssignReasonOpen] = useState(false)
+  useEffect(() => {
+    setAcDone({})
+    setAssignReasonOpen(false)
+  }, [ticket.id])
+
   const roster = ticket.assignee_member_id ? team.find((m) => m.id === ticket.assignee_member_id) : null
   const assigneeLabel = roster?.name ?? ticket.assignee_name ?? null
 
@@ -84,26 +82,60 @@ function TicketModal({
               <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.nice_to_have}`}>
                 {PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
               </span>
-              <span className="flex items-center gap-1.5 text-xs text-[#8b949e]">
-                <span className={`w-1.5 h-1.5 rounded-sm ${COMPLEXITY_DOT[ticket.complexity] ?? COMPLEXITY_DOT.beginner}`} />
-                {COMPLEXITY_LABELS[ticket.complexity] ?? ticket.complexity}
-              </span>
             </div>
             <h3 className="text-lg font-semibold text-[#e6edf3] leading-snug">{ticket.title}</h3>
             {assigneeLabel && (
-              <div className="mt-3 flex items-start gap-3">
+              <div
+                className={
+                  ticket.assignment_reason
+                    ? 'mt-3 flex cursor-pointer items-start gap-3 rounded-md p-2 -m-2 transition-colors hover:bg-[#21262d]/60'
+                    : 'mt-3 flex items-start gap-3'
+                }
+                onClick={
+                  ticket.assignment_reason
+                    ? () => setAssignReasonOpen((o) => !o)
+                    : undefined
+                }
+                role={ticket.assignment_reason ? 'button' : undefined}
+                tabIndex={ticket.assignment_reason ? 0 : undefined}
+                onKeyDown={
+                  ticket.assignment_reason
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setAssignReasonOpen((o) => !o)
+                        }
+                      }
+                    : undefined
+                }
+              >
                 <div
                   className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold text-white shadow-inner"
                   style={{ backgroundColor: `hsl(${avatarHue(assigneeLabel)}, 42%, 42%)` }}
-                  title={ticket.assignment_reason ?? assigneeLabel}
+                  title={assigneeLabel}
                 >
                   {initialsForName(assigneeLabel)}
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-[#484f58] uppercase tracking-wider">Assigned to</p>
-                  <p className="text-sm text-[#e6edf3] font-medium">{assigneeLabel}</p>
-                  {ticket.assignment_reason && (
-                    <p className="text-xs text-[#8b949e] mt-1.5 leading-relaxed">{ticket.assignment_reason}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-[#484f58] uppercase tracking-wider">Assigned to</p>
+                      <p className="text-sm text-[#e6edf3] font-medium">{assigneeLabel}</p>
+                    </div>
+                    {ticket.assignment_reason && (
+                      <svg
+                        className={`mt-1 h-4 w-4 shrink-0 text-[#6e7681] transition-transform ${assignReasonOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    )}
+                  </div>
+                  {ticket.assignment_reason && assignReasonOpen && (
+                    <p className="mt-2 text-xs leading-relaxed text-[#8b949e]">{ticket.assignment_reason}</p>
                   )}
                 </div>
               </div>
@@ -128,46 +160,90 @@ function TicketModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            {ticket.complexity_reason && (
-              <div className="bg-[#0d1117] rounded-md p-3">
-                <h4 className="text-xs font-semibold text-[#484f58] uppercase tracking-wider mb-1.5">Complexity Reason</h4>
-                <p className="text-xs text-[#8b949e] leading-relaxed">{ticket.complexity_reason}</p>
-              </div>
-            )}
-            {ticket.priority_reason && (
-              <div className="bg-[#0d1117] rounded-md p-3">
-                <h4 className="text-xs font-semibold text-[#484f58] uppercase tracking-wider mb-1.5">Priority Reason</h4>
-                <p className="text-xs text-[#8b949e] leading-relaxed">{ticket.priority_reason}</p>
-              </div>
-            )}
-          </div>
+          {(ticket.complexity_reason || ticket.priority_reason) && (
+            <div className="space-y-3">
+              {ticket.complexity_reason && (
+                <details className="group rounded-md bg-[#21262d]/80">
+                  <summary className={REASON_DETAILS_SUMMARY_CLASS}>
+                    <span>Complexity reason</span>
+                    <svg
+                      className="h-4 w-4 shrink-0 text-[#6e7681] transition-transform group-open:rotate-180"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <p className="px-3 pb-2 pt-0 text-xs leading-relaxed text-[#8b949e]">{ticket.complexity_reason}</p>
+                </details>
+              )}
+              {ticket.priority_reason && (
+                <details className="group rounded-md bg-[#21262d]/80">
+                  <summary className={REASON_DETAILS_SUMMARY_CLASS}>
+                    <span>Priority reason</span>
+                    <svg
+                      className="h-4 w-4 shrink-0 text-[#6e7681] transition-transform group-open:rotate-180"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <p className="px-3 pb-2 pt-0 text-xs leading-relaxed text-[#8b949e]">{ticket.priority_reason}</p>
+                </details>
+              )}
+            </div>
+          )}
 
           {ticket.steps?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-[#484f58] uppercase tracking-wider mb-2">Implementation Steps</h4>
-              <ol className="space-y-1.5">
+              <ul className="space-y-2">
                 {ticket.steps.map((step, i) => (
-                  <li key={i} className="flex gap-3 text-[#8b949e]">
-                    <span className="shrink-0 w-5 h-5 rounded-md bg-[#1c2128] text-[#484f58] text-xs flex items-center justify-center font-mono">{i + 1}</span>
-                    <span className="leading-relaxed">{step}</span>
+                  <li key={i} className="leading-relaxed text-[#8b949e]">
+                    {step}
                   </li>
                 ))}
-              </ol>
+              </ul>
             </div>
           )}
 
           {ticket.acceptance_criteria?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-[#484f58] uppercase tracking-wider mb-2">Acceptance Criteria</h4>
-              <ul className="space-y-1.5">
-                {ticket.acceptance_criteria.map((ac, i) => (
-                  <li key={i} className="flex gap-2 text-[#8b949e]">
-                    <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-sm bg-[#2da44e]" />
-                    <span className="leading-relaxed">{ac}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-hidden rounded-md border border-[#30363d]">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[#30363d] bg-[#0d1117]">
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[#484f58]">
+                        Criterion
+                      </th>
+                      <th className="w-14 px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-[#484f58]">
+                        Met
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ticket.acceptance_criteria.map((ac, i) => (
+                      <tr key={i} className="border-b border-[#21262d] last:border-b-0">
+                        <td className="px-3 py-2 align-top text-[#8b949e]">{ac}</td>
+                        <td className="px-2 py-2 text-center align-middle">
+                          <input
+                            type="checkbox"
+                            checked={acDone[i] ?? false}
+                            onChange={() =>
+                              setAcDone((prev) => ({ ...prev, [i]: !prev[i] }))
+                            }
+                            className="h-4 w-4 cursor-pointer rounded border-[#30363d] bg-[#0d1117] text-[#2da44e] focus:ring-offset-0"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
