@@ -37,6 +37,8 @@ export interface TicketColumns {
 interface TicketContextType {
   columns: TicketColumns
   setColumns: Dispatch<SetStateAction<TicketColumns>>
+  completedTickets: Ticket[]
+  setCompletedTickets: Dispatch<SetStateAction<Ticket[]>>
   goal: string
   setGoal: (goal: string) => void
   repo: string
@@ -51,6 +53,7 @@ const STORAGE_KEY = 'ticketeer_cache'
 
 function loadCache(): {
   columns: TicketColumns
+  completedTickets: Ticket[]
   goal: string
   repo: string
   team: TeamMember[]
@@ -61,30 +64,56 @@ function loadCache(): {
       const parsed = JSON.parse(raw) as Record<string, unknown>
       return {
         columns: (parsed.columns as TicketColumns) ?? { beginner: [], intermediate: [], advanced: [] },
+        completedTickets: Array.isArray(parsed.completedTickets)
+          ? (parsed.completedTickets as Ticket[])
+          : [],
         goal: (parsed.goal as string) ?? '',
         repo: (parsed.repo as string) ?? '',
         team: Array.isArray(parsed.team) ? (parsed.team as TeamMember[]) : [],
       }
     }
   } catch {}
-  return { columns: { beginner: [], intermediate: [], advanced: [] }, goal: '', repo: '', team: [] }
+  return {
+    columns: { beginner: [], intermediate: [], advanced: [] },
+    completedTickets: [],
+    goal: '',
+    repo: '',
+    team: [],
+  }
 }
 
 export function TicketProvider({ children }: { children: ReactNode }) {
   const cached = loadCache()
   const [columns, setColumns] = useState<TicketColumns>(cached.columns)
+  const [completedTickets, setCompletedTickets] = useState<Ticket[]>(cached.completedTickets)
   const [goal, setGoal] = useState(cached.goal)
   const [repo, setRepo] = useState(cached.repo)
   const [team, setTeam] = useState<TeamMember[]>(cached.team)
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ columns, goal, repo, team }))
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ columns, completedTickets, goal, repo, team }),
+      )
     } catch {}
-  }, [columns, goal, repo, team])
+  }, [columns, completedTickets, goal, repo, team])
 
   return (
-    <TicketContext.Provider value={{ columns, setColumns, goal, setGoal, repo, setRepo, team, setTeam }}>
+    <TicketContext.Provider
+      value={{
+        columns,
+        setColumns,
+        completedTickets,
+        setCompletedTickets,
+        goal,
+        setGoal,
+        repo,
+        setRepo,
+        team,
+        setTeam,
+      }}
+    >
       {children}
     </TicketContext.Provider>
   )

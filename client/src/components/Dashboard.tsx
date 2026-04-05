@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTickets } from '../context/TicketContext'
 import type { TeamMember, Ticket, TicketColumns } from '../context/TicketContext'
 import TeamPanel from './TeamPanel'
+import TicketSidebarNav from './TicketSidebarNav'
 
 function initialsForName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -43,18 +44,60 @@ const REASON_DETAILS_SUMMARY_CLASS =
 function TicketModal({
   ticket,
   team,
+  isCompleted,
   onClose,
+  onUpdate,
+  onRemove,
+  onMarkComplete,
+  onReopenTodo,
 }: {
   ticket: Ticket
   team: TeamMember[]
+  isCompleted: boolean
   onClose: () => void
+  onUpdate: (id: string, fields: Partial<Ticket>) => void
+  onRemove: (id: string) => void
+  onMarkComplete: () => void
+  onReopenTodo: () => void
 }) {
   const [acDone, setAcDone] = useState<Record<number, boolean>>({})
   const [assignReasonOpen, setAssignReasonOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({
+    title: ticket.title,
+    epic: ticket.epic,
+    description: ticket.description,
+    priority: ticket.priority,
+    complexity: ticket.complexity,
+  })
+
   useEffect(() => {
     setAcDone({})
     setAssignReasonOpen(false)
+    setEditing(false)
+    setForm({
+      title: ticket.title,
+      epic: ticket.epic,
+      description: ticket.description,
+      priority: ticket.priority,
+      complexity: ticket.complexity,
+    })
   }, [ticket.id])
+
+  const setField = (field: string, value: string) =>
+    setForm((f) => ({ ...f, [field]: value }))
+
+  const saveEdit = () => {
+    if (!form.title.trim()) return
+    onUpdate(ticket.id, {
+      title: form.title.trim(),
+      epic: form.epic,
+      description: form.description,
+      priority: form.priority as Ticket['priority'],
+      complexity: form.complexity as Ticket['complexity'],
+    })
+    setEditing(false)
+  }
 
   const roster = ticket.assignee_member_id ? team.find((m) => m.id === ticket.assignee_member_id) : null
   const assigneeLabel = roster?.name ?? ticket.assignee_name ?? null
@@ -69,10 +112,10 @@ function TicketModal({
 
       {/* Panel */}
       <div
-        className="relative z-10 bg-[#161b22] border border-[#30363d] rounded-md w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl"
+        className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-[#30363d] bg-[#161b22] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 p-6 border-b border-[#30363d]">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#30363d] bg-[#161b22] p-6">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <span className="text-[11px] font-medium text-[#484f58] uppercase tracking-widest">
@@ -82,6 +125,11 @@ function TicketModal({
               <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.nice_to_have}`}>
                 {PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
               </span>
+              {isCompleted && (
+                <span className="text-xs px-2 py-0.5 rounded-md font-medium bg-[#1c2a21] text-[#3fb950] border border-[#238636]/50">
+                  Completed
+                </span>
+              )}
             </div>
             <h3 className="text-lg font-semibold text-[#e6edf3] leading-snug">{ticket.title}</h3>
             {assigneeLabel && (
@@ -151,8 +199,66 @@ function TicketModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 p-6 space-y-5 text-sm">
+        {/* Body — scrolls; footer stays fixed below */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-5 text-sm">
+          {editing ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-semibold text-[#484f58] uppercase tracking-widest block mb-1.5">
+                  Title <span className="text-[#f85149]">*</span>
+                </label>
+                <input
+                  value={form.title}
+                  onChange={(e) => setField('title', e.target.value)}
+                  className="w-full bg-[#0d1117] border border-[#21262d] rounded-md px-3 py-2 text-sm text-[#e6edf3] focus:outline-none focus:border-[#388bfd]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-[#484f58] uppercase tracking-widest block mb-1.5">Epic</label>
+                <input
+                  value={form.epic}
+                  onChange={(e) => setField('epic', e.target.value)}
+                  className="w-full bg-[#0d1117] border border-[#21262d] rounded-md px-3 py-2 text-sm text-[#e6edf3] focus:outline-none focus:border-[#388bfd]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-[#484f58] uppercase tracking-widest block mb-1.5">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setField('description', e.target.value)}
+                  rows={4}
+                  className="w-full bg-[#0d1117] border border-[#21262d] rounded-md px-3 py-2 text-sm text-[#e6edf3] focus:outline-none focus:border-[#388bfd] resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-[#484f58] uppercase tracking-widest block mb-1.5">Priority</label>
+                  <select
+                    value={form.priority}
+                    onChange={(e) => setField('priority', e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#21262d] rounded-md px-3 py-2 text-sm text-[#e6edf3] focus:outline-none focus:border-[#388bfd]"
+                  >
+                    <option value="critical_path">Critical</option>
+                    <option value="important">Important</option>
+                    <option value="nice_to_have">Nice to Have</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-[#484f58] uppercase tracking-widest block mb-1.5">Complexity</label>
+                  <select
+                    value={form.complexity}
+                    onChange={(e) => setField('complexity', e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#21262d] rounded-md px-3 py-2 text-sm text-[#e6edf3] focus:outline-none focus:border-[#388bfd]"
+                  >
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="advanced">Advanced</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
           {ticket.description && (
             <div>
               <h4 className="text-xs font-semibold text-[#484f58] uppercase tracking-wider mb-2">Description</h4>
@@ -236,7 +342,7 @@ function TicketModal({
                             onChange={() =>
                               setAcDone((prev) => ({ ...prev, [i]: !prev[i] }))
                             }
-                            className="h-4 w-4 cursor-pointer rounded border-[#30363d] bg-[#0d1117] text-[#2da44e] focus:ring-offset-0"
+                            className="h-4 w-4 cursor-pointer rounded border-[#30363d] bg-[#000000] text-[#2da44e] focus:ring-offset-0"
                           />
                         </td>
                       </tr>
@@ -272,6 +378,76 @@ function TicketModal({
               </ul>
             </div>
           )}
+            </>
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[#30363d] bg-[#161b22] px-6 py-4">
+          {editing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(false)
+                  setForm({
+                    title: ticket.title,
+                    epic: ticket.epic,
+                    description: ticket.description,
+                    priority: ticket.priority,
+                    complexity: ticket.complexity,
+                  })
+                }}
+                className="text-xs font-medium text-[#8b949e] hover:text-[#e6edf3] px-3 py-2 rounded-md transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={!form.title.trim()}
+                className="text-xs font-medium text-white bg-[#207a39] hover:bg-[#3fb950] disabled:opacity-40 px-4 py-2 rounded-md transition"
+              >
+                Save
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="text-xs font-medium text-[#c9d1d9] border border-[#30363d] hover:border-[#8b949e] hover:bg-[#21262d] px-3 py-2 rounded-md transition"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Remove this ticket permanently?')) onRemove(ticket.id)
+                }}
+                className="text-xs font-medium text-[#f85149] border border-[#f8514944] hover:bg-[#f8514918] px-3 py-2 rounded-md transition"
+              >
+                Remove
+              </button>
+              {!isCompleted && (
+                <button
+                  type="button"
+                  onClick={onMarkComplete}
+                  className="text-xs font-medium text-white bg-[#207a39] hover:bg-[#3fb950] px-3 py-2 rounded-md transition"
+                >
+                  Mark complete
+                </button>
+              )}
+              {isCompleted && (
+                <button
+                  type="button"
+                  onClick={onReopenTodo}
+                  className="text-xs font-medium text-[#c9d1d9] border border-[#388bfd55] bg-[#388bfd14] hover:bg-[#388bfd22] px-3 py-2 rounded-md transition"
+                >
+                  Move to to do
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -284,16 +460,27 @@ const TicketCard = memo(function TicketCard({
   onOpen,
   dimmed,
   team,
+  assignModeMember,
+  onAssignToSelected,
+  onUnassignTicket,
 }: {
   ticket: Ticket
   index: number
   onOpen: (t: Ticket) => void
   dimmed: boolean
   team: TeamMember[]
+  assignModeMember: TeamMember | null
+  onAssignToSelected: (t: Ticket) => void
+  onUnassignTicket: (t: Ticket) => void
 }) {
   const rosterMember = ticket.assignee_member_id ? team.find((m) => m.id === ticket.assignee_member_id) : undefined
   const assigneeLabel = rosterMember?.name ?? ticket.assignee_name ?? null
   const reasonText = ticket.assignment_reason
+  const assignMode = !!assignModeMember
+  const assignedToSelected =
+    !!assignModeMember && ticket.assignee_member_id === assignModeMember.id
+  const blockPointerWhenDimmed = dimmed && !assignMode
+  const canOpenModal = !blockPointerWhenDimmed
 
   return (
     <Draggable draggableId={ticket.id} index={index}>
@@ -302,9 +489,9 @@ const TicketCard = memo(function TicketCard({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          onClick={() => !dimmed && onOpen(ticket)}
-          className={`bg-[#161b22] border-2 rounded-sm p-4 mb-1.5 select-none cursor-pointer ${
-            dimmed ? 'opacity-20 pointer-events-none' : 'opacity-100'
+          onClick={() => canOpenModal && onOpen(ticket)}
+          className={`group relative bg-[#161b22] border-2 rounded-sm p-4 mb-1.5 select-none cursor-pointer ${
+            blockPointerWhenDimmed ? 'opacity-20 pointer-events-none' : dimmed ? 'opacity-[0.38]' : 'opacity-100'
           } ${
             snapshot.isDragging
               ? 'border-[#2da44e] shadow-xl shadow-black/40'
@@ -337,6 +524,46 @@ const TicketCard = memo(function TicketCard({
               </div>
             )}
           </div>
+
+          {assignModeMember && (
+            <>
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-28 rounded-b-sm opacity-0 bg-gradient-to-t from-[#010409] via-[#010409]/70 to-transparent transition-opacity duration-150 group-hover:opacity-100"
+                aria-hidden
+              />
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center pb-2.5 pt-10 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="pointer-events-auto flex gap-2">
+                  {!assignedToSelected && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onAssignToSelected(ticket)
+                      }}
+                      className="text-[11px] font-semibold px-3 py-1.5 rounded-md bg-[#207a39] text-white hover:bg-[#3fb950] shadow-sm"
+                    >
+                      Assign to {assignModeMember.name.split(/\s+/)[0]}
+                    </button>
+                  )}
+                  {assignedToSelected && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onUnassignTicket(ticket)
+                      }}
+                      className="text-[11px] font-semibold px-3 py-1.5 rounded-md bg-[#21262d] text-[#e6edf3] border border-[#484f58] hover:bg-[#30363d]"
+                    >
+                      Unassign
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </Draggable>
@@ -544,9 +771,10 @@ const INITIAL_AI_MESSAGE: ChatMessage = {
 }
 
 function Dashboard() {
-  const { columns, setColumns, team, setTeam } = useTickets()
+  const { columns, setColumns, completedTickets, setCompletedTickets, team, setTeam } = useTickets()
   const navigate = useNavigate()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
   const [showNewTicket, setShowNewTicket] = useState(false)
   const [search, setSearch] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('all')
@@ -576,11 +804,78 @@ function Dashboard() {
   }, [chatMessages])
 
   useEffect(() => {
+    if (selectedMemberId && !team.some((m) => m.id === selectedMemberId)) {
+      setSelectedMemberId(null)
+    }
+  }, [team, selectedMemberId])
+
+  const assignModeMember = selectedMemberId
+    ? team.find((m) => m.id === selectedMemberId) ?? null
+    : null
+
+  useEffect(() => {
     if (!selectedTicket) return
-    const all = [...columns.beginner, ...columns.intermediate, ...columns.advanced]
-    const updated = all.find((t) => t.id === selectedTicket.id)
+    const fromBoard = [...columns.beginner, ...columns.intermediate, ...columns.advanced].find(
+      (t) => t.id === selectedTicket.id,
+    )
+    const fromDone = completedTickets.find((t) => t.id === selectedTicket.id)
+    const updated = fromBoard ?? fromDone
     if (updated) setSelectedTicket(updated)
-  }, [columns, selectedTicket?.id])
+    else setSelectedTicket(null)
+  }, [columns, completedTickets, selectedTicket?.id])
+
+  const selectedTicketIsCompleted = selectedTicket
+    ? completedTickets.some((t) => t.id === selectedTicket.id)
+    : false
+
+  const updateTicketFields = useCallback(
+    (id: string, fields: Partial<Ticket>) => {
+      setColumns((prev) => applyActions(prev, [{ type: 'update', ticket_id: id, fields }]))
+      setCompletedTickets((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, ...fields } : t)),
+      )
+    },
+    [setColumns, setCompletedTickets],
+  )
+
+  const removeTicketById = useCallback(
+    (id: string) => {
+      setColumns((prev) => ({
+        beginner: prev.beginner.filter((t) => t.id !== id),
+        intermediate: prev.intermediate.filter((t) => t.id !== id),
+        advanced: prev.advanced.filter((t) => t.id !== id),
+      }))
+      setCompletedTickets((prev) => prev.filter((t) => t.id !== id))
+      setSelectedTicket(null)
+    },
+    [setColumns, setCompletedTickets],
+  )
+
+  const markTicketComplete = useCallback(
+    (ticket: Ticket) => {
+      setColumns((prev) => {
+        const col = ticket.complexity as keyof TicketColumns
+        return { ...prev, [col]: prev[col].filter((t) => t.id !== ticket.id) }
+      })
+      setCompletedTickets((prev) =>
+        prev.some((t) => t.id === ticket.id) ? prev : [...prev, ticket],
+      )
+      setSelectedTicket(null)
+    },
+    [setColumns, setCompletedTickets],
+  )
+
+  const reopenTicketTodo = useCallback(
+    (ticket: Ticket) => {
+      setCompletedTickets((prev) => prev.filter((t) => t.id !== ticket.id))
+      setColumns((prev) => {
+        const col = ticket.complexity as keyof TicketColumns
+        return { ...prev, [col]: [...prev[col], ticket] }
+      })
+      setSelectedTicket(null)
+    },
+    [setColumns, setCompletedTickets],
+  )
 
   const runAutoAssign = useCallback(async () => {
     if (team.length === 0 || assignLoading) return
@@ -624,6 +919,7 @@ function Dashboard() {
         ...columns.beginner,
         ...columns.intermediate,
         ...columns.advanced,
+        ...completedTickets,
       ]
 
       // keeping only the most recent messages to avoid exceeding the model's context window
@@ -653,6 +949,20 @@ function Dashboard() {
       const data: { reply: string; actions: Action[] } = await res.json()
 
       setColumns(applyActions(columns, data.actions))
+      setCompletedTickets((prev) => {
+        let next = [...prev]
+        for (const action of data.actions) {
+          if (action.type === 'delete') {
+            next = next.filter((t) => t.id !== action.ticket_id)
+          }
+          if (action.type === 'update') {
+            next = next.map((t) =>
+              t.id === action.ticket_id ? { ...t, ...action.fields } : t,
+            )
+          }
+        }
+        return next
+      })
 
       const aiMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -670,16 +980,70 @@ function Dashboard() {
     } finally {
       setChatLoading(false)
     }
-  }, [chatInput, chatLoading, chatMessages, columns, setColumns])
+  }, [chatInput, chatLoading, chatMessages, columns, completedTickets, setColumns, setCompletedTickets])
 
-  const totalTickets = Object.values(columns).reduce((sum, col) => sum + col.length, 0)
+  const totalActiveTickets =
+    columns.beginner.length + columns.intermediate.length + columns.advanced.length
+  const hasAnyTickets = totalActiveTickets > 0 || completedTickets.length > 0
 
   const matches = (ticket: Ticket) => {
     const q = search.trim().toLowerCase()
     const matchesSearch = !q || ticket.title.toLowerCase().includes(q) || ticket.description?.toLowerCase().includes(q) || ticket.epic?.toLowerCase().includes(q)
     const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter
-    return matchesSearch && matchesPriority
+    const matchesMember =
+      !selectedMemberId || ticket.assignee_member_id === selectedMemberId
+    return matchesSearch && matchesPriority && matchesMember
   }
+
+  const handleAssignToSelectedMember = useCallback(
+    (ticket: Ticket) => {
+      if (!assignModeMember) return
+      setColumns((prev) => {
+        const keys = Object.keys(prev) as (keyof TicketColumns)[]
+        const next: TicketColumns = {
+          beginner: [...prev.beginner],
+          intermediate: [...prev.intermediate],
+          advanced: [...prev.advanced],
+        }
+        for (const col of keys) {
+          next[col] = next[col].map((t) =>
+            t.id === ticket.id
+              ? {
+                  ...t,
+                  assignee_member_id: assignModeMember.id,
+                  assignee_name: assignModeMember.name,
+                  assignment_reason: null,
+                }
+              : t
+          )
+        }
+        return next
+      })
+    },
+    [assignModeMember, setColumns]
+  )
+
+  const handleUnassignTicket = useCallback(
+    (ticket: Ticket) => {
+      setColumns((prev) => {
+        const keys = Object.keys(prev) as (keyof TicketColumns)[]
+        const next: TicketColumns = {
+          beginner: [...prev.beginner],
+          intermediate: [...prev.intermediate],
+          advanced: [...prev.advanced],
+        }
+        for (const col of keys) {
+          next[col] = next[col].map((t) =>
+            t.id === ticket.id
+              ? { ...t, assignee_member_id: null, assignee_name: null, assignment_reason: null }
+              : t
+          )
+        }
+        return next
+      })
+    },
+    [setColumns]
+  )
 
   const handleNewTicket = useCallback((ticket: Ticket) => {
     const col = ticket.complexity as keyof TicketColumns
@@ -709,7 +1073,7 @@ function Dashboard() {
     setColumns(newColumns)
   }
 
-  if (totalTickets === 0) {
+  if (!hasAnyTickets) {
     return (
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4">
         <p className="text-[#6e7681] text-sm mb-4">No tickets yet. Analyze a repo to get started.</p>
@@ -725,7 +1089,21 @@ function Dashboard() {
 
   return (
     <main className="flex-1 flex min-h-0">
-      <TeamPanel team={team} setTeam={setTeam} />
+      <div className="flex w-[350px] shrink-0 flex-col min-h-0 border-r border-[#30363d] bg-[#010409] overflow-hidden">
+        <TeamPanel
+          team={team}
+          setTeam={setTeam}
+          selectedMemberId={selectedMemberId}
+          onSelectMember={setSelectedMemberId}
+        />
+        <TicketSidebarNav
+          columns={columns}
+          completedTickets={completedTickets}
+          onOpenTicket={setSelectedTicket}
+          onMarkComplete={markTicketComplete}
+          onReopenTodo={reopenTicketTodo}
+        />
+      </div>
 
       {/* center: toolbar + board */}
       <div className="flex flex-col flex-1 min-h-0 min-w-0 pl-6 pr-2 pt-6 pb-4">
@@ -733,7 +1111,7 @@ function Dashboard() {
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-6 pb-3">
         <h2 className="text-xl font-semibold tracking-tight text-[#e6edf3] shrink-0 mr-1">Ticket Board</h2>
-        <span className="text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-md tabular-nums shrink-0">{totalTickets}</span>
+        <span className="text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-md tabular-nums shrink-0">{totalActiveTickets}</span>
 
         <div className="w-px h-4 bg-[#30363d] shrink-0 mx-1" />
 
@@ -819,7 +1197,9 @@ function Dashboard() {
                 <div className="flex items-center gap-2 mb-3 px-1">
                   <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${col.dot}`} />
                   <span className="text-sm font-semibold tracking-widest text-[#c9d1d9]">{col.label}</span>
-                  <span className="ml-auto text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-md tabular-nums">{columns[col.key].length}</span>
+                  <span className="ml-auto text-xs font-medium text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded-md tabular-nums">
+                    {columns[col.key].filter(matches).length}
+                  </span>
                 </div>
 
                 {/* Droppable column */}
@@ -841,6 +1221,9 @@ function Dashboard() {
                           onOpen={handleOpenTicket}
                           dimmed={!matches(ticket)}
                           team={team}
+                          assignModeMember={assignModeMember}
+                          onAssignToSelected={handleAssignToSelectedMember}
+                          onUnassignTicket={handleUnassignTicket}
                         />
                       ))}
                       {provided.placeholder}
@@ -926,7 +1309,16 @@ function Dashboard() {
         </div>
 
       {selectedTicket && (
-        <TicketModal ticket={selectedTicket} team={team} onClose={() => setSelectedTicket(null)} />
+        <TicketModal
+          ticket={selectedTicket}
+          team={team}
+          isCompleted={selectedTicketIsCompleted}
+          onClose={() => setSelectedTicket(null)}
+          onUpdate={updateTicketFields}
+          onRemove={removeTicketById}
+          onMarkComplete={() => markTicketComplete(selectedTicket)}
+          onReopenTodo={() => reopenTicketTodo(selectedTicket)}
+        />
       )}
       {showNewTicket && (
         <NewTicketModal onClose={() => setShowNewTicket(false)} onSave={handleNewTicket} />

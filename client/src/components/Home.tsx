@@ -126,7 +126,7 @@ function HomePage() {
     <main className="flex-1 flex items-center gap-0 overflow-hidden">
 
       {/* Left */}
-      <div className="flex-1 flex flex-col justify-center px-16 h-full border-r border-[#21262d]">
+      <div className="flex-1 flex flex-col justify-center px-16 h-full">
         <h1 className="text-5xl font-bold text-[#e6edf3] leading-tight tracking-tight mb-5">
           Turn your GitHub repo into<br />
           a scoped <span className="font-bold text-[#2da44e]">Ticket</span> board
