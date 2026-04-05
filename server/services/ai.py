@@ -37,6 +37,47 @@ PRIORITY_PATTERNS = {
 
 MAX_CONTENT_CHARS = 320000
 
+_VALID_PRIORITIES = frozenset({"critical_path", "important", "nice_to_have"})
+_VALID_COMPLEXITY = frozenset({"beginner", "intermediate", "advanced"})
+
+
+def _normalize_priority(value: object) -> str:
+  if not isinstance(value, str) or not value.strip():
+    return "important"
+  v = value.strip().lower().replace(" ", "_").replace("-", "_")
+  aliases = {
+    "critical_path": "critical_path",
+    "criticalpath": "critical_path",
+    "critical": "critical_path",
+    "important": "important",
+    "nice_to_have": "nice_to_have",
+    "nicetohave": "nice_to_have",
+    "nice": "nice_to_have",
+    "optional": "nice_to_have",
+  }
+  out = aliases.get(v)
+  if out:
+    return out
+  if v in _VALID_PRIORITIES:
+    return v
+  return "important"
+
+
+def _normalize_complexity(value: object) -> str:
+  if not isinstance(value, str) or not value.strip():
+    return "intermediate"
+  v = value.strip().lower()
+  if v in _VALID_COMPLEXITY:
+    return v
+  if v in ("beginer", "junior"):
+    return "beginner"
+  if v in ("intermediate", "mid"):
+    return "intermediate"
+  if v in ("advanced", "expert", "senior"):
+    return "advanced"
+  return "intermediate"
+
+
 def is_priority_file(path: str) -> bool:
   filename = path.split("/")[-1].lower()
   return any(p.lower() in filename for p in PRIORITY_PATTERNS)
@@ -205,13 +246,17 @@ async def classify_single_task(task: dict, repo_data: dict, analysis: dict) -> d
   - critical_path: other tasks cannot start or complete without this
   - important: significant value but not blocking
   - nice_to_have: improves UX/DX but can be deferred
+  Spread priorities across the board: only mark true blockers as critical_path; use nice_to_have for polish and deferrable work. Do not label every task "important".
   """
   raw = await _gemini_call(prompt)
   if raw.startswith("```"):
       raw = raw.split("```")[1]
       if raw.startswith("json"):
           raw = raw[4:]
-  return json.loads(raw.strip())
+  data = json.loads(raw.strip())
+  data["priority"] = _normalize_priority(data.get("priority"))
+  data["complexity"] = _normalize_complexity(data.get("complexity"))
+  return data
 
 # step 3.3: classify all the tasks
 async def classify_tasks(decomposition: dict, repo_data: dict, analysis: dict) -> dict:
@@ -376,7 +421,13 @@ async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analy
     if raw.startswith("json"):
       raw = raw[4:]
 
-  return json.loads(raw.strip())
+  ticket = json.loads(raw.strip())
+  # Full ticket generation often collapses priority/complexity to one label; keep classify step authoritative.
+  ticket["priority"] = _normalize_priority(task.get("priority", ticket.get("priority")))
+  ticket["priority_reason"] = (task.get("priority_reason") or ticket.get("priority_reason") or "").strip()
+  ticket["complexity"] = _normalize_complexity(task.get("complexity", ticket.get("complexity")))
+  ticket["complexity_reason"] = (task.get("complexity_reason") or ticket.get("complexity_reason") or "").strip()
+  return ticket
 
 
 # chat: mutate tickets based on a additional user inputs

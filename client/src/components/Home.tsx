@@ -68,7 +68,7 @@ function HomePage() {
   const [stepIndex, setStepIndex] = useState(-1)
   const [error, setError] = useState('')
 
-  const { setColumns, setGoal: setCtxGoal, setRepo } = useTickets()
+  const { setColumns, setGoal: setCtxGoal, setRepo, setCompletedTickets } = useTickets()
   const navigate = useNavigate()
 
   const handleGenerate = async () => {
@@ -111,6 +111,7 @@ function HomePage() {
       }
 
       setColumns(columns)
+      setCompletedTickets([])
       setCtxGoal(goal)
       setRepo(url)
       localStorage.removeItem('chatMessages')
