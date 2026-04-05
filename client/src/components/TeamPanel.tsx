@@ -53,18 +53,28 @@ export default function TeamPanel({
   onSelectMember: (id: string | null) => void
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<{ name: string; experience: ExperienceTier; tags: string } | null>(null)
+  const [draft, setDraft] = useState<{
+    name: string
+    experience: ExperienceTier
+    tags: string
+    github_username: string
+  } | null>(null)
   const [search, setSearch] = useState('')
 
   const startAdd = useCallback(() => {
     const id = crypto.randomUUID()
     setEditingId(id)
-    setDraft({ name: '', experience: 'intermediate', tags: '' })
+    setDraft({ name: '', experience: 'intermediate', tags: '', github_username: '' })
   }, [])
 
   const startEdit = useCallback((m: TeamMember) => {
     setEditingId(m.id)
-    setDraft({ name: m.name, experience: m.experience, tags: formatTags(m.tags) })
+    setDraft({
+      name: m.name,
+      experience: m.experience,
+      tags: formatTags(m.tags),
+      github_username: m.github_username ?? '',
+    })
   }, [])
 
   const cancelEdit = useCallback(() => {
@@ -77,8 +87,15 @@ export default function TeamPanel({
     const name = draft.name.trim()
     if (!name) return
     const tags = parseTags(draft.tags)
+    const gh = draft.github_username.trim().replace(/^@/, '')
     const exists = team.some((m) => m.id === editingId)
-    const next: TeamMember = { id: editingId, name, experience: draft.experience, tags }
+    const next: TeamMember = {
+      id: editingId,
+      name,
+      experience: draft.experience,
+      tags,
+      github_username: gh || null,
+    }
     if (exists) {
       setTeam(team.map((m) => (m.id === editingId ? next : m)))
     } else {
@@ -105,7 +122,8 @@ export default function TeamPanel({
     if (!q) return true
     return (
       m.name.toLowerCase().includes(q) ||
-      m.tags.some((t) => t.toLowerCase().includes(q))
+      m.tags.some((t) => t.toLowerCase().includes(q)) ||
+      (m.github_username && m.github_username.toLowerCase().includes(q))
     )
   })
 
@@ -198,6 +216,14 @@ export default function TeamPanel({
                   placeholder="Tags: React, CSS, databases…"
                   className="w-full bg-[#161b22] border border-[#30363d] rounded-md px-2.5 py-1.5 text-xs text-[#e6edf3] placeholder-[#484f58] focus:outline-none focus:border-[#388bfd]"
                 />
+                <input
+                  value={draft.github_username}
+                  onChange={(e) =>
+                    setDraft((d) => (d ? { ...d, github_username: e.target.value } : d))
+                  }
+                  placeholder="GitHub username (for issue assignee)"
+                  className="w-full bg-[#161b22] border border-[#30363d] rounded-md px-2.5 py-1.5 text-xs text-[#e6edf3] placeholder-[#484f58] focus:outline-none focus:border-[#388bfd]"
+                />
                 <div className="flex gap-2 justify-end pt-1">
                   <button
                     type="button"
@@ -249,7 +275,12 @@ export default function TeamPanel({
               </button>
 
               {expanded && (
-                <div className="space-y-2 pt-1">
+                <div className="">
+                  {m.github_username && (
+                    <p className="text-[10px] text-[#2d70bd] font-mono">
+                      @{m.github_username}
+                    </p>
+                  )}
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8b949e] mb-1.5">
                       Skills
@@ -318,6 +349,14 @@ export default function TeamPanel({
               value={draft.tags}
               onChange={(e) => setDraft((d) => (d ? { ...d, tags: e.target.value } : d))}
               placeholder="Tags: React, CSS, databases…"
+              className="w-full bg-[#161b22] border border-[#30363d] rounded-md px-2.5 py-1.5 text-xs text-[#e6edf3] placeholder-[#484f58] focus:outline-none focus:border-[#388bfd]"
+            />
+            <input
+              value={draft.github_username}
+              onChange={(e) =>
+                setDraft((d) => (d ? { ...d, github_username: e.target.value } : d))
+              }
+              placeholder="GitHub username (for issue assignee)"
               className="w-full bg-[#161b22] border border-[#30363d] rounded-md px-2.5 py-1.5 text-xs text-[#e6edf3] placeholder-[#484f58] focus:outline-none focus:border-[#388bfd]"
             />
             <div className="flex gap-2 justify-end pt-1">

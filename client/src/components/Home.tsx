@@ -113,6 +113,7 @@ function HomePage() {
       setColumns(columns)
       setCtxGoal(goal)
       setRepo(url)
+      localStorage.removeItem('chatMessages')
       navigate('/dashboard')
     } catch (e: any) {
       setError(e.message || 'Something went wrong')

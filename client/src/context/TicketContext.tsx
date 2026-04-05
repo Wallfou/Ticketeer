@@ -8,6 +8,7 @@ export interface TeamMember {
   name: string
   experience: ExperienceTier
   tags: string[]
+  github_username?: string | null
 }
 
 export interface Ticket {
@@ -26,6 +27,7 @@ export interface Ticket {
   assignee_member_id?: string | null
   assignee_name?: string | null
   assignment_reason?: string | null
+  depends_on_ticket_ids?: string[]
 }
 
 export interface TicketColumns {

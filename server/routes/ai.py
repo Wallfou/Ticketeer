@@ -1,6 +1,6 @@
 import json
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any
 from services.github import analyze_repo as github_analyze_repo
 from services.ai import analyze_repo as ai_analyze_repo
@@ -78,6 +78,7 @@ class ChatMessageItem(BaseModel):
 class ChatRequest(BaseModel):
   messages: list[ChatMessageItem]
   tickets: list[dict[str, Any]]
+  team: list[dict[str, Any]] = Field(default_factory=list)
 
 @router.post("/ai/chat")
 async def chat(body: ChatRequest):
@@ -85,6 +86,7 @@ async def chat(body: ChatRequest):
     result = await ai_chat_tickets(
       [m.model_dump() for m in body.messages],
       body.tickets,
+      body.team,
     )
     return result
   except json.JSONDecodeError:

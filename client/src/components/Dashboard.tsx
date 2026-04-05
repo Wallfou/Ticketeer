@@ -771,7 +771,15 @@ const INITIAL_AI_MESSAGE: ChatMessage = {
 }
 
 function Dashboard() {
-  const { columns, setColumns, completedTickets, setCompletedTickets, team, setTeam } = useTickets()
+  const {
+    columns,
+    setColumns,
+    completedTickets,
+    setCompletedTickets,
+    team,
+    setTeam,
+    repo,
+  } = useTickets()
   const navigate = useNavigate()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
@@ -779,6 +787,7 @@ function Dashboard() {
   const [search, setSearch] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [assignLoading, setAssignLoading] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem('chatMessages')
     if (saved) {
@@ -877,6 +886,69 @@ function Dashboard() {
     [setColumns, setCompletedTickets],
   )
 
+  const runExportToGithub = useCallback(async () => {
+    if (!repo.trim() || exportLoading) return
+    const allTickets: Ticket[] = [
+      ...columns.beginner,
+      ...columns.intermediate,
+      ...columns.advanced,
+      ...completedTickets,
+    ]
+    if (allTickets.length === 0) return
+
+    setExportLoading(true)
+    try {
+      const res = await fetch('/api/github/export-issues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo_url: repo.trim(),
+          tickets: allTickets.map((t) => ({
+            ...t,
+            depends_on_ticket_ids: t.depends_on_ticket_ids ?? [],
+          })),
+          team: team.map((m) => ({
+            id: m.id,
+            name: m.name,
+            github_username: m.github_username ?? null,
+          })),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail : 'Export failed'
+        throw new Error(detail)
+      }
+      const created = data.created as number
+      const urls = (data.issue_urls as string[]) ?? []
+      const warnings = (data.warnings as string[]) ?? []
+      const lines = [
+        `Exported ${created} issue(s) to GitHub.`,
+        urls.length > 0 ? `Open: ${urls.slice(0, 3).join(' · ')}${urls.length > 3 ? ' …' : ''}` : '',
+        warnings.length > 0 ? `Notes: ${warnings.slice(0, 2).join(' ')}` : '',
+      ].filter(Boolean)
+      setChatMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: 'ai', text: lines.join('\n') },
+      ])
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Export failed'
+      setChatMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: 'ai', text: `GitHub export failed: ${msg}` },
+      ])
+    } finally {
+      setExportLoading(false)
+    }
+  }, [
+    repo,
+    exportLoading,
+    columns,
+    completedTickets,
+    team,
+    setChatMessages,
+  ])
+
   const runAutoAssign = useCallback(async () => {
     if (team.length === 0 || assignLoading) return
     const allTickets = [...columns.beginner, ...columns.intermediate, ...columns.advanced]
@@ -938,7 +1010,7 @@ function Dashboard() {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, tickets: allTickets }),
+        body: JSON.stringify({ messages: history, tickets: allTickets, team }),
       })
 
       if (!res.ok) {
@@ -980,7 +1052,7 @@ function Dashboard() {
     } finally {
       setChatLoading(false)
     }
-  }, [chatInput, chatLoading, chatMessages, columns, completedTickets, setColumns, setCompletedTickets])
+  }, [chatInput, chatLoading, chatMessages, columns, completedTickets, team, setColumns, setCompletedTickets])
 
   const totalActiveTickets =
     columns.beginner.length + columns.intermediate.length + columns.advanced.length
@@ -1078,10 +1150,11 @@ function Dashboard() {
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4">
         <p className="text-[#6e7681] text-sm mb-4">No tickets yet. Analyze a repo to get started.</p>
         <button
+          type="button"
           onClick={() => navigate('/')}
           className="px-4 py-2 bg-[#2da44e] hover:bg-[#3fb950] text-white text-sm font-medium rounded-md transition"
         >
-          New Analysis
+          Back to home
         </button>
       </main>
     )
@@ -1181,10 +1254,28 @@ function Dashboard() {
           New Ticket
         </button>
         <button
-          onClick={() => navigate('/')}
-          className="text-xs font-medium text-[#c9d1d9] border border-[#30363d] hover:border-[#8b949e] hover:text-white bg-[#161b22] hover:bg-[#21262d] px-3 py-1.5 rounded-md transition shrink-0"
+          type="button"
+          onClick={runExportToGithub}
+          disabled={!repo.trim() || exportLoading}
+          title={
+            !repo.trim()
+              ? 'Run analysis from the home page with a repo URL first'
+              : 'Create GitHub Issues in the connected repository'
+          }
+          className="flex items-center gap-1.5 text-xs font-medium text-[#e6edf3] border border-[#23863666] bg-[#23863614] hover:bg-[#23863622] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition shrink-0"
         >
-          New Analysis
+          {exportLoading ? (
+            <span className="w-3.5 h-3.5 border-2 border-[#3fb950] border-t-transparent rounded-md animate-spin" />
+          ) : (
+            <svg className="w-3.5 h-3.5 text-[#3fb950]" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path
+                fillRule="evenodd"
+                d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+          Export to GitHub Issues
         </button>
       </div>
 
@@ -1241,16 +1332,19 @@ function Dashboard() {
       </div>
 
       {/* Chat Panel */}
-        <div className="w-[350px] shrink-0 flex flex-col min-h-0 bg-[#010409] border-l border-[#30363d] overflow-hidden">
+        <div className="w-[350px] shrink-0 flex flex-col min-h-0 min-w-0 bg-[#010409] border-l border-[#30363d] overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[#21262d] shrink-0">
             <span className="text-md font-semibold text-[#e6edf3]">Ticket Copilot</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-3 space-y-3">
             {chatMessages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                key={msg.id}
+                className={`flex w-full min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
                 <div
-                  className={`max-w-[90%] rounded-md px-3 py-2 text-sm leading-relaxed ${
+                  className={`min-w-0 max-w-[90%] rounded-md px-3 py-2 text-sm leading-relaxed break-words [overflow-wrap:anywhere] whitespace-pre-wrap ${
                     msg.role === 'user'
                       ? 'bg-[#207a39] text-white rounded-br-sm'
                       : 'bg-[#1c2128] text-white border border-[#30363d] rounded-bl-sm'
@@ -1298,7 +1392,7 @@ function Dashboard() {
               <button
                 onClick={sendMessage}
                 disabled={!chatInput.trim() || chatLoading}
-                className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center bg-[#207a39] hover:bg-[#2da44e] disabled:bg-[#1a2d1e] disabled:cursor-not-allowed transition"
+                className="shrink-0 w-7 h-7 rounded-3xl flex items-center justify-center bg-[#207a39] hover:bg-[#2da44e] disabled:bg-[#1a2d1e] disabled:cursor-not-allowed transition"
               >
                 <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />

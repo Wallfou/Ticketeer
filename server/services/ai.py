@@ -9,7 +9,7 @@ load_dotenv()
 _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
-_gemini_limiter = AsyncLimiter(max_rate=9, time_period=60)
+_gemini_limiter = AsyncLimiter(max_rate=8, time_period=60)
 
 async def _gemini_call(prompt: str, retries: int = 3) -> str:
   for attempt in range(retries):
@@ -380,8 +380,21 @@ async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analy
 
 
 # chat: mutate tickets based on a additional user inputs
-async def chat_tickets(messages: list[dict], tickets: list[dict]) -> dict:
+async def chat_tickets(messages: list[dict], tickets: list[dict], team: list[dict] | None = None) -> dict:
   tickets_json = json.dumps(tickets, indent=2)
+  roster = team or []
+  roster_json = json.dumps(roster, indent=2)
+  if roster:
+    roster_block = f"""
+Team roster (JSON). Each member has "id", "name", "experience" (beginner | intermediate | advanced), and "tags" (skills/tech areas):
+{roster_json}
+
+Tickets may include assignee_member_id, assignee_name, and assignment_reason when work is assigned. Match assignee_member_id to a roster member's "id". Use the roster to reason about skills, fit, and workload when answering questions or when updating assignments.
+"""
+  else:
+    roster_block = """
+No team roster is configured yet (the user can add members in the Team panel). You can still edit tickets; avoid assuming specific people until a roster exists.
+"""
 
   history_lines = []
   for m in messages[:-1]:
@@ -395,6 +408,7 @@ async def chat_tickets(messages: list[dict], tickets: list[dict]) -> dict:
 
 Current tickets (JSON):
 {tickets_json}
+{roster_block}
 {history_block}
 User: {current_message}
 
@@ -409,14 +423,17 @@ Ticket field reference:
   title (string), epic (string), description (string),
   complexity ("beginner" | "intermediate" | "advanced"), complexity_reason (string),
   priority ("critical_path" | "important" | "nice_to_have"), priority_reason (string),
-  file_references (string[]), steps (string[]), acceptance_criteria (string[]), resources (string[])
+  file_references (string[]), steps (string[]), acceptance_criteria (string[]), resources (string[]),
+  assignee_member_id (string | null), assignee_name (string | null), assignment_reason (string | null),
+  depends_on_ticket_ids (string[] of other ticket ids this ticket must follow; omit or [] if none)
+  When setting an assignee, use the roster member's exact "id" and "name". Set both fields together; clear assignment with nulls if appropriate.
 
 Respond ONLY with valid JSON in exactly this shape — no markdown, no extra keys:
 {{
   "reply": "<1-3 sentence conversational response acknowledging what you changed or why you didn't>",
   "actions": [
     {{ "type": "update", "ticket_id": "<id>", "fields": {{ "<field>": "<value>" }} }},
-    {{ "type": "create", "ticket": {{ "title": "...", "epic": "...", "description": "...", "complexity": "beginner", "complexity_reason": "...", "priority": "important", "priority_reason": "...", "file_references": [], "steps": [], "acceptance_criteria": [], "resources": [] }} }},
+    {{ "type": "create", "ticket": {{ "title": "...", "epic": "...", "description": "...", "complexity": "beginner", "complexity_reason": "...", "priority": "important", "priority_reason": "...", "file_references": [], "steps": [], "acceptance_criteria": [], "resources": [], "depends_on_ticket_ids": [] }} }},
     {{ "type": "delete", "ticket_id": "<id>" }}
   ]
 }}
