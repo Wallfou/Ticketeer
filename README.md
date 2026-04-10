@@ -1,3 +1,5 @@
+<img width="1512" height="862" alt="TicketeerPic" src="https://github.com/user-attachments/assets/b846e813-15b1-4bb0-884f-c205a7b7a182" />
+
 ## Ticketeer
 
 AI-powered ticket generation for teams with mixed experience levels: connect a GitHub repo, describe a goal, and get scoped, classified tickets on a kanban board—with an AI copilot for refinement and optional team-aware assignment.
