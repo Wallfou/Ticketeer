@@ -16,7 +16,7 @@ Pure vector search under-performs on code because identifiers matter (searching 
 
 **Dense:** embed every chunk with a code-aware embedding model. Options I'm considering:
 
-- `text-embedding-004` (Gemini, cheap, solid)
+- `gemini-embedding-001` (Gemini API stable text model; use `output_dimensionality` 768/1536/3072 — we use 768 to match `vector(768)`. Older `text-embedding-004` is shut down per [deprecations](https://ai.google.dev/gemini-api/docs/deprecations).)
 - `voyage-code-3` (best code quality if I want a second provider)
 - `jina-embeddings-v2-base-code` (self-hostable)
 
@@ -90,7 +90,7 @@ tiktoken                   # for accurate token packing
 Each step is independently useful — building in this order:
 
 1. Add `pgvector` extension + `code_chunks` table via a new Alembic migration.
-2. Write `services/indexing.py`: chunk with tree-sitter, embed with Gemini `text-embedding-004`, upsert to `code_chunks` keyed by `project_id`.
+2. Write `services/indexing.py`: chunk with tree-sitter, embed with Gemini `gemini-embedding-001` (`output_dimensionality=768`), upsert to `code_chunks` keyed by `project_id`.
 3. Replace `retrieve_relevant_files` with `services/retrieval.py` doing dense-only search first (simplest working RAG).
 4. Add BM25 and RRF fusion.
 5. Add the two-stage file → chunk packing with context expansion.

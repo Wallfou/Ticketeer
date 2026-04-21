@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Enable pgvector and create code_chunks (768-dim embeddings, e.g. text-embedding-004)."""
+    """Enable pgvector and create code_chunks (768-dim embeddings; e.g. gemini-embedding-001 with output_dimensionality=768)."""
     op.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
     op.execute(
         sa.text(
