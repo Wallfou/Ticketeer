@@ -422,7 +422,6 @@ async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analy
       raw = raw[4:]
 
   ticket = json.loads(raw.strip())
-  # Full ticket generation often collapses priority/complexity to one label; keep classify step authoritative.
   ticket["priority"] = _normalize_priority(task.get("priority", ticket.get("priority")))
   ticket["priority_reason"] = (task.get("priority_reason") or ticket.get("priority_reason") or "").strip()
   ticket["complexity"] = _normalize_complexity(task.get("complexity", ticket.get("complexity")))
