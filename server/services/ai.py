@@ -4,6 +4,9 @@ from google import genai
 import asyncio
 from aiolimiter import AsyncLimiter
 from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from services.retrieval import retrieve_relevant_context
 
 load_dotenv()
 _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -187,35 +190,19 @@ async def analyze_goal(goal: str, analysis: dict) -> dict:
   return json.loads(raw.strip())
 
 
-# step 3.1: find relevant files
-def retrieve_relevant_files(task: dict, repo_data: dict, max_chars: int = 12000) -> str:
-    hints = set(h.lower() for h in task.get("file_hints", []))
-    keywords = set(task["title"].lower().split()) | set(task["description"].lower().split()) | hints
-    scored = []
-    for file in repo_data["files"]:
-        path_lower = file["path"].lower()
-        score = sum(10 if hint in path_lower else 0 for hint in hints)
-        score += sum(1 for kw in keywords if kw in path_lower)
-        if score > 0:
-            scored.append((score, file))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    sections = []
-    total = 0
-    for _, file in scored:
-        content = file.get("content", "")
-        if not content.strip():
-            continue
-        chunk = f"### {file['path']}\n```{file['language'].lower()}\n{content}\n```\n"
-        if total + len(chunk) > max_chars:
-            break
-        sections.append(chunk)
-        total += len(chunk)
-    return "\n".join(sections) if sections else "No directly relevant files found."
-
-
 # step 3.2: classifying a task on the sclae of complexity and priority
-async def classify_single_task(task: dict, repo_data: dict, analysis: dict) -> dict:
-  relevant_files = retrieve_relevant_files(task, repo_data)
+# (change) uses dense retrieval over code chunks if session and project_id are provided
+async def classify_single_task(
+  task: dict,
+  repo_data: dict,
+  analysis: dict,
+  *,
+  session: AsyncSession | None = None,
+  project_id: int | None = None,
+) -> dict:
+  relevant_files = await retrieve_relevant_context(
+    session, project_id, task, repo_data, max_chars=12000,
+  )
   prompt = f"""
   You are a senior engineering lead classifying a development task.
   Codebase context:
@@ -259,12 +246,21 @@ async def classify_single_task(task: dict, repo_data: dict, analysis: dict) -> d
   return data
 
 # step 3.3: classify all the tasks
-async def classify_tasks(decomposition: dict, repo_data: dict, analysis: dict) -> dict:
+async def classify_tasks(
+  decomposition: dict,
+  repo_data: dict,
+  analysis: dict,
+  *,
+  session: AsyncSession | None = None,
+  project_id: int | None = None,
+) -> dict:
   classified_epics = []
   for epic in decomposition["epics"]:
     # run all tasks in this epic concurrently
     classified_tasks = await asyncio.gather(*[
-      classify_single_task(task, repo_data, analysis)
+      classify_single_task(
+        task, repo_data, analysis, session=session, project_id=project_id,
+      )
       for task in epic["tasks"]
     ])
     classified_epics.append({
@@ -410,8 +406,18 @@ Return ONLY valid JSON with this exact shape:
 
 
 # step 4.2: write a full ticket for a single classified task
-async def write_single_ticket(task: dict, epic_name: str, repo_data: dict, analysis: dict) -> dict:
-  relevant_files = retrieve_relevant_files(task, repo_data)
+async def write_single_ticket(
+  task: dict,
+  epic_name: str,
+  repo_data: dict,
+  analysis: dict,
+  *,
+  session: AsyncSession | None = None,
+  project_id: int | None = None,
+) -> dict:
+  relevant_files = await retrieve_relevant_context(
+    session, project_id, task, repo_data, max_chars=12000,
+  )
   prompt = _build_ticket_prompt(task, epic_name, relevant_files, analysis)
 
   raw = await _gemini_call(prompt)
@@ -542,12 +548,22 @@ Include one assignment per ticket in the input. The "member" value must exactly 
 
 
 # step 4.3: write all tickets across all epics
-async def write_tickets(classified: dict, repo_data: dict, analysis: dict) -> dict:
+async def write_tickets(
+  classified: dict,
+  repo_data: dict,
+  analysis: dict,
+  *,
+  session: AsyncSession | None = None,
+  project_id: int | None = None,
+) -> dict:
   result_epics = []
 
   for epic in classified["epics"]:
     tickets = await asyncio.gather(*[
-      write_single_ticket(task, epic["name"], repo_data, analysis)
+      write_single_ticket(
+        task, epic["name"], repo_data, analysis,
+        session=session, project_id=project_id,
+      )
       for task in epic["tasks"]
     ])
     result_epics.append({

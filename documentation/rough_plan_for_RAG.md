@@ -91,7 +91,7 @@ Each step is independently useful — building in this order:
 
 1. Add `pgvector` extension + `code_chunks` table via a new Alembic migration.
 2. Write `services/indexing.py`: chunk with tree-sitter, embed with Gemini `gemini-embedding-001` (`output_dimensionality=768`), upsert to `code_chunks` keyed by `project_id`.
-3. Replace `retrieve_relevant_files` with `services/retrieval.py` doing dense-only search first (simplest working RAG).
+3. Replace `retrieve_relevant_files` with `services/retrieval.py`: dense cosine search over `code_chunks` when `project_id` + DB session are provided (`POST /ai/classify` and `/ai/tickets` body field `project_id`); otherwise keyword/path fallback on `repo_data`.
 4. Add BM25 and RRF fusion.
 5. Add the two-stage file → chunk packing with context expansion.
 6. *(Optional)* Add LLM reranker for the ticket-writing path.

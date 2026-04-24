@@ -57,7 +57,7 @@ async def index_repo_endpoint(body: IndexRepoRequest):
         await session.rollback()
         raise
     return stats
-    
+
   except ValueError as e:
     raise HTTPException(status_code=400, detail=str(e))
   except RuntimeError as e:
@@ -85,11 +85,31 @@ class ClassifyTasksRequest(BaseModel):
   decomposition: dict
   analysis: dict
   repo_data: dict
+  project_id: int | None = Field(
+    default=None,
+    description="If set, use dense vector search over code_chunks for this projects.id.",
+  )
 
 @router.post("/ai/classify")
 async def classify_tasks_with_ai(body: ClassifyTasksRequest):
   try:
-    classified = await ai_classify_tasks(body.decomposition, body.repo_data, body.analysis)
+    if body.project_id is not None:
+      async with Session() as session:
+        classified = await ai_classify_tasks(
+          body.decomposition,
+          body.repo_data,
+          body.analysis,
+          session=session,
+          project_id=body.project_id,
+        )
+    else:
+      classified = await ai_classify_tasks(
+        body.decomposition,
+        body.repo_data,
+        body.analysis,
+        session=None,
+        project_id=None,
+      )
     return classified
   except json.JSONDecodeError:
     raise HTTPException(status_code=500, detail="AI returned invalid JSON")
@@ -101,11 +121,31 @@ class WriteTicketsRequest(BaseModel):
   classified: dict
   analysis: dict
   repo_data: dict
+  project_id: int | None = Field(
+    default=None,
+    description="If set, use dense vector search over code_chunks for this projects.id",
+  )
 
 @router.post("/ai/tickets")
 async def write_tickets(body: WriteTicketsRequest):
   try:
-    tickets = await ai_write_tickets(body.classified, body.repo_data, body.analysis)
+    if body.project_id is not None:
+      async with Session() as session:
+        tickets = await ai_write_tickets(
+          body.classified,
+          body.repo_data,
+          body.analysis,
+          session=session,
+          project_id=body.project_id,
+        )
+    else:
+      tickets = await ai_write_tickets(
+        body.classified,
+        body.repo_data,
+        body.analysis,
+        session=None,
+        project_id=None,
+      )
     return tickets
   except json.JSONDecodeError:
     raise HTTPException(status_code=500, detail="AI returned invalid JSON")
